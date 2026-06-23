@@ -1,0 +1,288 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 30% 8%;
+    --foreground: 50 60% 90%;
+    --card: 240 25% 14%;
+    --card-foreground: 50 60% 90%;
+    --popover: 240 25% 14%;
+    --popover-foreground: 50 60% 90%;
+    --primary: 45 100% 55%;
+    --primary-foreground: 240 30% 8%;
+    --secondary: 240 20% 20%;
+    --secondary-foreground: 50 40% 80%;
+    --muted: 240 18% 18%;
+    --muted-foreground: 220 15% 55%;
+    --accent: 140 60% 40%;
+    --accent-foreground: 140 60% 85%;
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 50 60% 95%;
+    --border: 45 60% 45%;
+    --input: 240 20% 20%;
+    --ring: 45 100% 55%;
+    --radius: 0px;
+
+    --sidebar-background: 240 25% 10%;
+    --sidebar-foreground: 50 40% 80%;
+    --sidebar-primary: 45 100% 55%;
+    --sidebar-primary-foreground: 240 30% 8%;
+    --sidebar-accent: 240 18% 18%;
+    --sidebar-accent-foreground: 50 40% 80%;
+    --sidebar-border: 45 60% 45%;
+    --sidebar-ring: 45 100% 55%;
+
+    /* Retro tokens */
+    --retro-blue: 220 70% 50%;
+    --retro-green: 140 60% 40%;
+    --retro-red: 0 80% 55%;
+    --retro-cyan: 180 60% 50%;
+    --primary-bright: 45 100% 75%;
+    --primary-dark: 45 80% 35%;
+
+    /* PixelBubble speech bubble tokens */
+    --pixel-ink: 0 0% 5%;           /* border/text colour (near-black) */
+    --pixel-bubble: 0 0% 98%;       /* fill colour (white) */
+    --pixel-bg: 240 25% 14%;        /* bg behind the bubble – used to cut corners */
+  }
+
+  .dark {
+    /* same as root */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    image-rendering: auto;
+  }
+  body {
+    @apply text-foreground;
+    background: transparent;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    letter-spacing: 0.5px;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Press Start 2P', monospace;
+    line-height: 1.6;
+  }
+}
+
+@layer utilities {
+  /* SNES-style dialog box with pixel border */
+  .pixel-box {
+    background: hsl(var(--card) / 0.65);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 4px solid hsl(var(--border));
+    box-shadow:
+            inset 2px 2px 0 hsl(var(--primary) / 0.3),
+            inset -2px -2px 0 hsl(240 25% 8%),
+            6px 6px 0 hsl(240 30% 4% / 0.7);
+    position: relative;
+  }
+  .pixel-box::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border: 2px solid hsl(var(--primary) / 0.15);
+    pointer-events: none;
+  }
+
+  .pixel-box-elevated {
+    background: hsl(var(--card) / 0.60);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 4px solid hsl(var(--primary));
+    box-shadow:
+            inset 3px 3px 0 hsl(var(--primary) / 0.25),
+            inset -3px -3px 0 hsl(240 25% 8%),
+            8px 8px 0 hsl(240 30% 4% / 0.65),
+            0 0 20px hsl(var(--primary) / 0.1);
+    position: relative;
+  }
+  .pixel-box-elevated::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 2px solid hsl(var(--primary) / 0.1);
+    pointer-events: none;
+  }
+
+  /* Keep old glass classes as aliases */
+  .glass-card {
+    @apply pixel-box;
+  }
+  .glass-card-elevated {
+    @apply pixel-box-elevated;
+  }
+
+  .text-gradient {
+    @apply text-primary;
+    text-shadow: 2px 2px 0 hsl(var(--destructive)), -1px -1px 0 hsl(var(--retro-red) / 0.5);
+  }
+
+  .retro-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border: 3px solid hsl(var(--border));
+    box-shadow:
+            inset 2px 2px 0 hsl(var(--primary-bright)),
+            inset -2px -2px 0 hsl(var(--primary-dark)),
+            4px 4px 0 hsl(240 30% 4%);
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: transform 0.05s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .retro-btn:hover {
+    transform: translate(1px, 1px);
+    box-shadow:
+            inset 2px 2px 0 hsl(var(--primary-bright)),
+            inset -2px -2px 0 hsl(var(--primary-dark)),
+            2px 2px 0 hsl(240 30% 4%);
+  }
+  .retro-btn:active {
+    transform: translate(3px, 3px);
+    box-shadow:
+            inset -2px -2px 0 hsl(var(--primary-bright)),
+            inset 2px 2px 0 hsl(var(--primary-dark));
+  }
+
+  .retro-btn-secondary {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    border: 3px solid hsl(var(--border));
+    box-shadow:
+            inset 2px 2px 0 hsl(240 20% 30%),
+            inset -2px -2px 0 hsl(240 25% 10%),
+            3px 3px 0 hsl(240 30% 4%);
+    padding: 8px 16px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .retro-btn-secondary:hover {
+    transform: translate(1px, 1px);
+    box-shadow:
+            inset 2px 2px 0 hsl(240 20% 30%),
+            inset -2px -2px 0 hsl(240 25% 10%),
+            1px 1px 0 hsl(240 30% 4%);
+  }
+
+  .glow-sm, .glow-md {
+    box-shadow: none;
+  }
+
+  .animate-spin-slow {
+    animation: none;
+  }
+
+  .animate-pulse-glow {
+    animation: retro-blink 1s step-end infinite;
+  }
+
+  /* Pixel scanline effect */
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            hsl(0 0% 0% / 0.08) 2px,
+            hsl(0 0% 0% / 0.08) 4px
+    );
+    pointer-events: none;
+  }
+}
+
+@keyframes marquee-continuous {
+  from { transform: translateX(0); }
+  to   { transform: translateX(var(--marquee-shift)); }
+}
+
+/* SNES-style dialog open/close */
+@keyframes snes-dialog-open {
+  0%   { transform: translate(-50%, -50%) scaleX(0.04) scaleY(0.04); opacity: 1; }
+  40%  { transform: translate(-50%, -50%) scaleX(1)    scaleY(0.04); }
+  100% { transform: translate(-50%, -50%) scaleX(1)    scaleY(1);    }
+}
+@keyframes snes-dialog-close {
+  0%   { transform: translate(-50%, -50%) scaleX(1)    scaleY(1);    opacity: 1; }
+  60%  { transform: translate(-50%, -50%) scaleX(1)    scaleY(0.04); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scaleX(0.04) scaleY(0.04); opacity: 0; }
+}
+@keyframes snes-content-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.snes-dialog[data-state="open"] {
+  animation: snes-dialog-open 280ms steps(10, end) both !important;
+}
+.snes-dialog[data-state="closed"] {
+  animation: snes-dialog-close 160ms steps(6, end) both !important;
+}
+.snes-dialog-content {
+  animation: snes-content-in 120ms steps(4, end) both;
+  animation-delay: 220ms;
+  opacity: 0;
+  animation-fill-mode: both;
+}
+
+@keyframes retro-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes retro-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Custom scrollbar - pixel style */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: hsl(var(--card)); border-left: 2px solid hsl(var(--border)); }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--secondary));
+  border: 2px solid hsl(var(--border));
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }
+
+/* Range slider - retro pixel style */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; background: transparent; }
+input[type=range]:focus { outline: none; }
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%; height: 8px; cursor: pointer;
+  background: hsl(var(--secondary));
+  border: 2px solid hsl(var(--border));
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; height: 16px; width: 10px;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--border));
+  cursor: pointer; margin-top: -6px;
+  box-shadow: 2px 2px 0 hsl(240 30% 4%);
+}
+input[type=range]:hover::-webkit-slider-thumb {
+  background: hsl(var(--primary-bright));
+}
+
+/* YouTube iframe fills its container in video mode */
+.yt-video-container > iframe {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  border: none;
+}

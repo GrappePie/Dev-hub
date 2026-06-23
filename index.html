@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- TODO: Set the document title to the name of your application -->
+  <title>Lovable App</title>
+  <meta name="description" content="Lovable Generated Project" />
+  <meta name="author" content="Lovable" />
+
+  <!-- TODO: Update og:title to match your application name -->
+  <meta property="og:title" content="Lovable App" />
+  <meta property="og:description" content="Lovable Generated Project" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@Lovable" />
+  <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+</head>
+
+<body>
+<div id="root"></div>
+<script>
+// AudioContext interceptor: kept minimal — Spotify/SoundCloud use DRM/native audio
+// that bypasses Web Audio API. getDisplayMedia is used instead for those platforms.
+// This interceptor is only useful if future platforms use Web Audio directly.
+(function () {
+  if (!window.AudioNode) return;
+  var _ctxMap = new Map();
+  var _origConnect = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function () {
+    var dest = arguments[0];
+    var ctx = this.context;
+    if (dest && ctx && dest === ctx.destination && !ctx.__devhubOwned) {
+      if (!_ctxMap.has(ctx)) {
+        try {
+          var a = ctx.createAnalyser();
+          a.fftSize = 1024;
+          a.smoothingTimeConstant = 0.85;
+          _origConnect.call(a, dest);
+          _ctxMap.set(ctx, a);
+        } catch (e) {}
+      }
+      var analyser = _ctxMap.get(ctx);
+      if (analyser && analyser !== this) {
+        try { _origConnect.call(this, analyser, arguments[1] || 0, 0); } catch (e) {}
+      }
+    }
+    return _origConnect.apply(this, arguments);
+  };
+  window.__audioInterceptor = {
+    getLatestAnalyser: function () {
+      var best = null; var bestPeak = -1;
+      _ctxMap.forEach(function (a) {
+        try {
+          var buf = new Uint8Array(a.frequencyBinCount);
+          a.getByteFrequencyData(buf);
+          var peak = 0;
+          for (var i = 0; i < buf.length; i++) { if (buf[i] > peak) peak = buf[i]; }
+          if (peak > bestPeak) { bestPeak = peak; best = a; }
+        } catch (e) {}
+      });
+      if (!best) _ctxMap.forEach(function (a) { best = a; });
+      return best;
+    }
+  };
+})();
+</script>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
