@@ -1,8 +1,8 @@
-import { clamp, snapToPixel, toHsla } from "../shared/utils";
+import { clamp, drawPixelLine, snapToPixel, toHsla } from "../shared/utils";
 import type { Palette, CritterState } from "../shared/types";
 import { drawSpaceContent } from "./space";
 import { drawPixelSun, drawPixelRainbow, drawPixelCloud, drawPixelBalloon, drawPixelTree, drawPixelFlower } from "./nature";
-import { drawPixelMountains } from "./mountains";
+import { drawPixelBackMountains, drawPixelFrontMountains } from "./mountains";
 import { drawFrogSprite, drawRabbitSprite, drawPixelBird, drawPixelButterfly, drawPixelBee } from "./sprites";
 import { drawPlaneEvent, drawUfoEvent } from "./events";
 
@@ -12,6 +12,11 @@ const COMMENT_DURATION = 3.5; // seconds to show a comment bubble
 const INK  = "rgba(13, 13, 13, 0.97)";   // hsl(0 0% 5%) ≈ --pixel-ink
 const FILL = "rgba(250, 250, 250, 0.97)"; // hsl(0 0% 98%) ≈ --pixel-bubble
 const USER_COLOR = "rgba(50, 70, 200, 0.95)";
+
+const grassNoise = (seed: number): number => {
+    const raw = Math.sin(seed * 12.9898) * 43758.5453;
+    return raw - Math.floor(raw);
+};
 
 /** Draw a staircase-corner box matching the PixelBubble component style. */
 const drawStaircaseBox = (
@@ -148,6 +153,36 @@ const drawCommentBubble = (
     ctx.restore();
 };
 
+const drawPixelGrassTuft = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    baseY: number,
+    pixel: number,
+    seed: number,
+    t: number,
+    energy: number
+): void => {
+    const p = pixel;
+    const bladeCount = 4 + Math.floor(grassNoise(seed + 0.2) * 5);
+    const sway = snapToPixel(Math.sin(t * 1.7 + seed) * p * energy, p);
+    const colors = ["128 58% 31%", "136 64% 42%", "92 56% 50%"] as const;
+
+    for (let i = 0; i < bladeCount; i++) {
+        const n = grassNoise(seed + i * 1.73);
+        const bx = x + snapToPixel((i - bladeCount / 2) * p * 1.4, p);
+        const bladeH = p * (2 + Math.floor(n * 6));
+        const lean = snapToPixel((n - 0.5) * p * 5 + sway, p);
+        const color = colors[(i + Math.floor(seed)) % colors.length] ?? colors[0];
+
+        ctx.fillStyle = toHsla(color, 0.95);
+        drawPixelLine(ctx, bx, baseY, bx + lean, baseY - bladeH, p);
+
+        if (n > 0.62) {
+            ctx.fillRect(bx + lean, baseY - bladeH - p, p, p);
+        }
+    }
+};
+
 export const drawCritterParade = (
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -196,10 +231,7 @@ export const drawCritterParade = (
     drawPlaneEvent(ctx, width, groundY, pixel, t);
     drawUfoEvent(ctx, width, groundY, pixel, t);
 
-    // Mountains (drawn before sun/clouds/birds so they layer correctly in background)
-    drawPixelMountains(ctx, width, groundY, pixel, t, progressNorm, isPlaying, volumeNorm);
-
-    // Sun nod: use global bass energy when live
+    // Sun nod: use global bass energy when live. Drawn behind the mountains.
     const beatFreqSun = isPlaying ? 9.2 : 2.8;
     let sunBeat: number;
     if (fftData) {
@@ -217,6 +249,18 @@ export const drawCritterParade = (
         Math.pow(sunBeat, 2) * energy
     );
 
+    // Distant mountains: behind the rainbow.
+    drawPixelBackMountains(
+        ctx,
+        width,
+        groundY,
+        pixel,
+        t,
+        progressNorm,
+        isPlaying,
+        volumeNorm
+    );
+
     // Rainbow — appears with music energy
     if (energy > 0.25) {
         const rainbowAlpha = clamp((energy - 0.25) / 0.75, 0, 1);
@@ -229,6 +273,18 @@ export const drawCritterParade = (
             rainbowAlpha
         );
     }
+
+    // Green foreground mountains: cover the lower part of the rainbow.
+    drawPixelFrontMountains(
+        ctx,
+        width,
+        groundY,
+        pixel,
+        t,
+        progressNorm,
+        isPlaying,
+        volumeNorm
+    );
 
     // Drifting clouds — positioned higher in sky
     const cloudDefs = [
@@ -279,14 +335,22 @@ export const drawCritterParade = (
     ctx.fillRect(0, groundY + Math.floor(groundH * 0.55), width, Math.ceil(groundH * 0.45));
     ctx.fillStyle = toHsla("128 58% 38%", 0.97);
     ctx.fillRect(0, groundY, width, Math.ceil(groundH * 0.55 + 1));
-    // Bright surface strip
-    ctx.fillStyle = toHsla("132 68% 52%", 0.9);
-    ctx.fillRect(0, groundY, width, pixel * 2);
-    // Animated grass blades
-    ctx.fillStyle = toHsla("132 62% 42%", 0.8);
-    for (let gx = 0; gx < width; gx += pixel * 3) {
-        const blade = snapToPixel(Math.abs(Math.sin(t * 1.6 + gx * 0.04)) * pixel * 1.2 * energy, pixel);
-        ctx.fillRect(gx, groundY - blade, pixel, blade + pixel);
+    ctx.fillStyle = toHsla("96 58% 50%", 0.92);
+    for (let gx = 0; gx < width; gx += pixel * 10) {
+        const patchW = pixel * (5 + Math.floor(grassNoise(gx * 0.13) * 7));
+        const patchY = groundY + pixel * Math.floor(grassNoise(gx * 0.19) * 2);
+        ctx.fillRect(gx, patchY, patchW, pixel * 2);
+    }
+
+    for (let gx = -pixel * 4; gx < width + pixel * 4; gx += pixel * 7) {
+        const seed = gx * 0.071;
+        const y = groundY + pixel * Math.floor(grassNoise(seed + 8) * 2);
+        drawPixelGrassTuft(ctx, gx, y, pixel, seed, t, energy);
+    }
+
+    for (let gx = pixel * 2; gx < width; gx += pixel * 13) {
+        const seed = gx * 0.053 + 20;
+        drawPixelGrassTuft(ctx, gx, groundY + pixel * 2, pixel, seed, t * 0.8, energy * 0.7);
     }
 
     // Trees and foreground elements (in front of mountains)
@@ -438,8 +502,8 @@ export const drawCritterParade = (
                 const alpha = critter.commentTimer > COMMENT_DURATION - 0.3
                     ? (COMMENT_DURATION - critter.commentTimer) / 0.3
                     : critter.commentTimer < 0.5
-                    ? critter.commentTimer / 0.5
-                    : 1;
+                        ? critter.commentTimer / 0.5
+                        : 1;
                 // Bubble floats at a fixed height above the critter lane —
                 // independent of jump arc — with a gentle slow sine wave.
                 const floatOffset = Math.sin(t * 1.8 + i * 2.1) * pixel * 2;
