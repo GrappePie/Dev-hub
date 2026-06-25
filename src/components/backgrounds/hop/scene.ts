@@ -1,7 +1,17 @@
 import { clamp, drawPixelLine, snapToPixel, toHsla } from "../shared/utils";
 import type { Palette, CritterState } from "../shared/types";
 import { drawSpaceContent } from "./space";
-import { drawPixelSun, drawPixelRainbow, drawPixelCloud, drawPixelBalloon, drawPixelTree, drawPixelFlower } from "./nature";
+import {
+    drawPixelSun,
+    drawPixelRainbow,
+    drawPixelCloud,
+    drawPixelBalloon,
+    drawPixelTree,
+    drawPixelFlower,
+    drawPixelBush,
+    drawPixelRock,
+    drawPixelMushroom,
+} from "./nature";
 import { drawPixelBackMountains, drawPixelFrontMountains } from "./mountains";
 import { drawFrogSprite, drawRabbitSprite, drawPixelBird, drawPixelButterfly, drawPixelBee } from "./sprites";
 import { drawPlaneEvent, drawUfoEvent } from "./events";
@@ -183,6 +193,51 @@ const drawPixelGrassTuft = (
     }
 };
 
+const drawPixelDirtGround = (
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    groundY: number,
+    pixel: number
+): void => {
+    const p = pixel;
+    const groundH = height - groundY;
+
+    ctx.fillStyle = toHsla("24 52% 34%", 0.98);
+    ctx.fillRect(0, groundY + p * 3, width, Math.max(0, groundH - p * 3));
+
+    ctx.fillStyle = toHsla("34 58% 43%", 0.95);
+    for (let y = groundY + p * 5; y < height; y += p * 7) {
+        for (let x = 0; x < width; x += p * 12) {
+            const n = grassNoise(x * 0.031 + y * 0.047);
+            const blockW = p * (3 + Math.floor(n * 4));
+            ctx.fillRect(x + p * Math.floor(n * 3), y, blockW, p * 2);
+        }
+    }
+
+    ctx.fillStyle = toHsla("20 48% 24%", 0.72);
+    for (let y = groundY + p * 8; y < height; y += p * 9) {
+        for (let x = p * 4; x < width; x += p * 16) {
+            if (grassNoise(x * 0.07 + y * 0.03) < 0.45) continue;
+            ctx.fillRect(x, y, p * 3, p);
+            ctx.fillRect(x + p, y + p, p * 2, p);
+        }
+    }
+
+    ctx.fillStyle = toHsla("128 58% 38%", 0.98);
+    ctx.fillRect(0, groundY, width, p * 3);
+
+    ctx.fillStyle = toHsla("96 58% 50%", 0.92);
+    for (let gx = 0; gx < width; gx += p * 10) {
+        const patchW = p * (5 + Math.floor(grassNoise(gx * 0.13) * 7));
+        const patchY = groundY + p * Math.floor(grassNoise(gx * 0.19) * 2);
+        ctx.fillRect(gx, patchY, patchW, p * 2);
+    }
+
+    ctx.fillStyle = toHsla("22 48% 21%", 0.55);
+    ctx.fillRect(0, groundY + p * 3, width, p);
+};
+
 export const drawCritterParade = (
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -329,18 +384,8 @@ export const drawCritterParade = (
         );
     }
 
-    // Layered ground: bright grass → mid green → dark soil
-    const groundH = height - groundY;
-    ctx.fillStyle = toHsla("22 55% 32%", 0.97);
-    ctx.fillRect(0, groundY + Math.floor(groundH * 0.55), width, Math.ceil(groundH * 0.45));
-    ctx.fillStyle = toHsla("128 58% 38%", 0.97);
-    ctx.fillRect(0, groundY, width, Math.ceil(groundH * 0.55 + 1));
-    ctx.fillStyle = toHsla("96 58% 50%", 0.92);
-    for (let gx = 0; gx < width; gx += pixel * 10) {
-        const patchW = pixel * (5 + Math.floor(grassNoise(gx * 0.13) * 7));
-        const patchY = groundY + pixel * Math.floor(grassNoise(gx * 0.19) * 2);
-        ctx.fillRect(gx, patchY, patchW, pixel * 2);
-    }
+    // Pixel platform ground: grass cap over textured dirt.
+    drawPixelDirtGround(ctx, width, height, groundY, pixel);
 
     for (let gx = -pixel * 4; gx < width + pixel * 4; gx += pixel * 7) {
         const seed = gx * 0.071;
@@ -353,14 +398,33 @@ export const drawCritterParade = (
         drawPixelGrassTuft(ctx, gx, groundY + pixel * 2, pixel, seed, t * 0.8, energy * 0.7);
     }
 
+    const detailStep = pixel * 48;
+    for (let dx = snapToPixel(pixel * 18, pixel); dx < width; dx += detailStep) {
+        const seed = grassNoise(dx * 0.041);
+        if (seed < 0.34) continue;
+
+        const detailX = snapToPixel(dx + (seed - 0.5) * detailStep * 0.55, pixel);
+        const detailY = groundY + pixel * (2 + Math.floor(grassNoise(seed + 3) * 4));
+        const detailType = Math.floor(seed * 5);
+
+        if (detailType === 1) {
+            drawPixelBush(ctx, detailX, detailY, pixel, Math.floor(seed * 100));
+        } else if (detailType === 3) {
+            drawPixelRock(ctx, detailX, detailY, pixel, Math.floor(seed * 100));
+        } else {
+            drawPixelMushroom(ctx, detailX, detailY, pixel, Math.floor(seed * 100));
+        }
+    }
+
     // Trees and foreground elements (in front of mountains)
-    const treeFracs = [0.12, 0.36, 0.64, 0.88];
-    const numTrees = width < pixel * 180 ? 2 : 4;
+    const treeFracs = [0.18, 0.48, 0.78];
+    const numTrees = width < pixel * 180 ? 2 : 3;
     for (let i = 0; i < numTrees; i++) {
         const treeX = snapToPixel(width * treeFracs[i], pixel);
+        const treeBaseY = groundY - pixel * (i % 2 === 0 ? 2 : 1);
         const treeSway = (Math.sin(t * 1.9 + i * 1.7) * 0.3 + Math.sin(t * 3.1 + i * 0.8) * 0.1)
             * (0.2 + energy * 0.8);
-        drawPixelTree(ctx, treeX, groundY, pixel, treeSway);
+        drawPixelTree(ctx, treeX, treeBaseY, pixel + 1, treeSway, i);
     }
 
     // Flowers along the ground

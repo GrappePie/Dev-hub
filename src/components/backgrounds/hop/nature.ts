@@ -1,4 +1,4 @@
-import { snapToPixel, toHsla } from "../shared/utils";
+import { drawPixelLine, snapToPixel, toHsla } from "../shared/utils";
 
 const allFinite = (...values: number[]): boolean => values.every(Number.isFinite);
 const isValidPixel = (pixel: number): boolean => Number.isFinite(pixel) && pixel > 0;
@@ -198,29 +198,164 @@ export const drawPixelTree = (
     baseX: number,
     baseY: number,
     pixel: number,
-    sway: number
+    sway: number,
+    variant = 0
 ): void => {
-    if (!isValidPixel(pixel) || !allFinite(baseX, baseY, sway)) return;
+    if (!isValidPixel(pixel) || !allFinite(baseX, baseY, sway, variant)) return;
 
     const p = pixel;
     const sw  = snapToPixel(sway * p * 2, p);
     const sw2 = snapToPixel(sway * p * 3, p);
     const sw3 = snapToPixel(sway * p * 4, p);
+    const type = ((Math.trunc(variant) % 4) + 4) % 4;
 
-    ctx.fillStyle = toHsla("28 50% 26%", 0.92);
-    ctx.fillRect(baseX - p, baseY - p * 7, p * 2, p * 7);
+    if (type === 1) {
+        ctx.fillStyle = toHsla("27 48% 25%", 0.95);
+        ctx.fillRect(baseX - p, baseY - p * 8, p * 2, p * 8);
+        ctx.fillRect(baseX - p * 3, baseY - p * 4, p * 2, p);
+        ctx.fillRect(baseX + p, baseY - p * 5, p * 3, p);
 
-    ctx.fillStyle = toHsla("135 48% 24%", 0.9);
-    ctx.fillRect(baseX - p * 5 + sw,  baseY - p * 11, p * 10, p * 4);
+        ctx.fillStyle = toHsla("126 44% 23%", 0.96);
+        ctx.fillRect(baseX - p * 7 + sw, baseY - p * 17, p * 14, p * 7);
+        ctx.fillRect(baseX - p * 5 + sw2, baseY - p * 21, p * 10, p * 5);
+        ctx.fillRect(baseX - p * 6 + sw, baseY - p * 12, p * 12, p * 4);
 
-    ctx.fillStyle = toHsla("135 52% 32%", 0.9);
-    ctx.fillRect(baseX - p * 4 + sw,  baseY - p * 14, p * 8,  p * 4);
+        ctx.fillStyle = toHsla("96 52% 50%", 0.55);
+        ctx.fillRect(baseX - p * 4 + sw, baseY - p * 20, p * 3, p * 2);
+        ctx.fillRect(baseX + p * 2 + sw2, baseY - p * 18, p * 2, p * 2);
 
-    ctx.fillStyle = toHsla("135 48% 24%", 0.88);
-    ctx.fillRect(baseX - p * 3 + sw2, baseY - p * 17, p * 6,  p * 3);
+        if (variant % 2 === 0) {
+            ctx.fillStyle = toHsla("8 78% 58%", 0.92);
+            ctx.fillRect(baseX - p * 3 + sw, baseY - p * 15, p, p);
+            ctx.fillRect(baseX + p * 4 + sw2, baseY - p * 13, p, p);
+            ctx.fillRect(baseX + sw, baseY - p * 19, p, p);
+        }
+        return;
+    }
 
-    ctx.fillStyle = toHsla("140 54% 35%", 0.88);
-    ctx.fillRect(baseX - p * 2 + sw3, baseY - p * 19, p * 4,  p * 2);
+    if (type === 2) {
+        ctx.fillStyle = toHsla("28 50% 26%", 0.95);
+        ctx.fillRect(baseX - p, baseY - p * 7, p * 2, p * 7);
+
+        const rows = [2, 4, 5, 6, 5, 4, 3, 2] as const;
+        for (const [row, halfWidth] of rows.entries()) {
+            const y = baseY - p * (row * 2 + 10);
+            const x = baseX - halfWidth * p + (row % 2 === 0 ? sw : sw2);
+            ctx.fillStyle = toHsla(row < 3 ? "116 60% 32%" : "118 56% 27%", 0.95);
+            ctx.fillRect(x, y, halfWidth * 2 * p, p * 2);
+        }
+        ctx.fillStyle = toHsla("112 66% 40%", 0.65);
+        ctx.fillRect(baseX - p + sw3, baseY - p * 24, p * 2, p * 2);
+        return;
+    }
+
+    if (type === 3) {
+        ctx.fillStyle = toHsla("27 46% 24%", 0.97);
+        ctx.fillRect(baseX - p, baseY - p * 8, p * 2, p * 8);
+        ctx.fillStyle = toHsla("27 46% 24%", 0.9);
+        drawPixelLine(ctx, baseX, baseY - p * 7, baseX - p * 4, baseY - p * 11, p);
+        drawPixelLine(ctx, baseX, baseY - p * 8, baseX + p * 4, baseY - p * 12, p);
+
+        ctx.fillStyle = toHsla("128 52% 25%", 0.96);
+        ctx.fillRect(baseX - p * 8 + sw, baseY - p * 15, p * 7, p * 5);
+        ctx.fillRect(baseX + p + sw2, baseY - p * 16, p * 7, p * 5);
+        ctx.fillRect(baseX - p * 5 + sw3, baseY - p * 20, p * 10, p * 6);
+
+        ctx.fillStyle = toHsla("132 58% 37%", 0.8);
+        ctx.fillRect(baseX - p * 6 + sw, baseY - p * 18, p * 3, p * 2);
+        ctx.fillRect(baseX + p * 2 + sw2, baseY - p * 19, p * 3, p * 2);
+        return;
+    }
+
+    ctx.fillStyle = toHsla("24 46% 16%", 0.98);
+    ctx.fillRect(baseX - p * 2, baseY - p * 8, p * 4, p * 8);
+    ctx.fillStyle = toHsla("31 55% 34%", 0.98);
+    ctx.fillRect(baseX - p, baseY - p * 8, p * 2, p * 8);
+
+    ctx.fillStyle = toHsla("116 58% 18%", 0.98);
+    ctx.fillRect(baseX - p * 7 + sw,  baseY - p * 13, p * 14, p * 5);
+    ctx.fillRect(baseX - p * 6 + sw,  baseY - p * 16, p * 12, p * 4);
+    ctx.fillRect(baseX - p * 5 + sw2, baseY - p * 19, p * 10, p * 4);
+    ctx.fillRect(baseX - p * 3 + sw3, baseY - p * 22, p * 6,  p * 3);
+
+    ctx.fillStyle = toHsla("102 68% 42%", 0.9);
+    ctx.fillRect(baseX - p * 5 + sw, baseY - p * 18, p * 4, p * 2);
+    ctx.fillRect(baseX + p + sw2, baseY - p * 15, p * 4, p * 2);
+    ctx.fillRect(baseX - p * 2 + sw3, baseY - p * 21, p * 3, p);
+};
+
+export const drawPixelBush = (
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    baseY: number,
+    pixel: number,
+    variant: number
+): void => {
+    if (!isValidPixel(pixel) || !allFinite(cx, baseY, variant)) return;
+
+    const p = pixel;
+    const fruit = variant % 3 === 0;
+
+    ctx.fillStyle = toHsla("105 46% 28%", 0.9);
+    ctx.fillRect(cx - p * 5, baseY - p * 4, p * 10, p * 4);
+    ctx.fillRect(cx - p * 4, baseY - p * 6, p * 8, p * 3);
+    ctx.fillRect(cx - p * 2, baseY - p * 8, p * 4, p * 2);
+
+    ctx.fillStyle = toHsla("92 52% 50%", 0.55);
+    ctx.fillRect(cx - p * 4, baseY - p * 6, p * 2, p);
+    ctx.fillRect(cx + p, baseY - p * 7, p * 2, p);
+
+    if (fruit) {
+        ctx.fillStyle = toHsla("48 92% 62%", 0.9);
+        ctx.fillRect(cx - p * 2, baseY - p * 6, p, p);
+        ctx.fillRect(cx + p * 3, baseY - p * 4, p, p);
+    }
+};
+
+export const drawPixelRock = (
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    baseY: number,
+    pixel: number,
+    variant: number
+): void => {
+    if (!isValidPixel(pixel) || !allFinite(cx, baseY, variant)) return;
+
+    const p = pixel;
+    const wide = variant % 2 === 0;
+    const width = wide ? p * 8 : p * 6;
+
+    ctx.fillStyle = toHsla("28 28% 28%", 0.55);
+    ctx.fillRect(cx - width / 2, baseY - p, width, p);
+    ctx.fillStyle = toHsla("34 28% 52%", 0.95);
+    ctx.fillRect(cx - width / 2, baseY - p * 4, width, p * 3);
+    ctx.fillRect(cx - width / 2 + p, baseY - p * 5, width - p * 2, p);
+    ctx.fillStyle = toHsla("34 34% 68%", 0.75);
+    ctx.fillRect(cx - width / 2 + p, baseY - p * 5, p * 2, p);
+    ctx.fillStyle = toHsla("25 30% 34%", 0.7);
+    ctx.fillRect(cx + width / 2 - p * 2, baseY - p * 3, p, p * 2);
+};
+
+export const drawPixelMushroom = (
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    baseY: number,
+    pixel: number,
+    variant: number
+): void => {
+    if (!isValidPixel(pixel) || !allFinite(cx, baseY, variant)) return;
+
+    const p = pixel;
+    const capColor = variant % 2 === 0 ? "352 72% 58%" : "280 54% 62%";
+
+    ctx.fillStyle = toHsla("36 40% 82%", 0.95);
+    ctx.fillRect(cx - p, baseY - p * 3, p * 2, p * 3);
+    ctx.fillStyle = toHsla(capColor, 0.95);
+    ctx.fillRect(cx - p * 3, baseY - p * 5, p * 6, p * 2);
+    ctx.fillRect(cx - p * 2, baseY - p * 6, p * 4, p);
+    ctx.fillStyle = toHsla("0 0% 96%", 0.9);
+    ctx.fillRect(cx - p, baseY - p * 5, p, p);
+    ctx.fillRect(cx + p * 2, baseY - p * 4, p, p);
 };
 
 export const drawPixelFlower = (
