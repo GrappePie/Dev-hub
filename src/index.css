@@ -179,6 +179,56 @@
             1px 1px 0 hsl(240 30% 4%);
   }
 
+  .smart-shuffle-power-field {
+    position: relative;
+    isolation: isolate;
+    overflow: visible;
+    background:
+            radial-gradient(circle at 50% 45%, hsl(var(--retro-cyan) / 0.36), transparent 52%),
+            linear-gradient(135deg, hsl(var(--accent) / 0.34), hsl(var(--secondary)) 48%, hsl(var(--retro-cyan) / 0.28));
+    color: hsl(var(--accent-foreground));
+    animation: smart-field-breathe 1.45s steps(5, end) infinite;
+    box-shadow:
+            inset 2px 2px 0 hsl(var(--accent-foreground) / 0.75),
+            inset -2px -2px 0 hsl(var(--accent) / 0.65),
+            3px 3px 0 hsl(240 30% 4%),
+            0 0 0 2px hsl(var(--accent) / 0.35),
+            0 0 16px hsl(var(--accent) / 0.72),
+            0 0 28px hsl(var(--retro-cyan) / 0.36);
+  }
+
+  .smart-shuffle-power-field::before,
+  .smart-shuffle-power-field::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .smart-shuffle-power-field::before {
+    inset: -7px;
+    background:
+            radial-gradient(circle, hsl(var(--accent) / 0.65) 0 22%, hsl(var(--retro-cyan) / 0.36) 38%, transparent 68%);
+    opacity: 0.55;
+    filter: blur(1px) drop-shadow(0 0 8px hsl(var(--accent)));
+    animation: smart-field-gate 1.1s steps(4, end) infinite;
+  }
+
+  .smart-shuffle-power-field::after {
+    inset: -4px;
+    border: 2px solid hsl(var(--accent));
+    box-shadow:
+            0 0 0 2px hsl(var(--retro-cyan) / 0.18),
+            0 0 10px hsl(var(--accent) / 0.7);
+    animation: smart-field-ring 1.35s steps(5, end) infinite;
+  }
+
+  .smart-shuffle-core {
+    filter:
+            drop-shadow(0 0 4px hsl(var(--accent)))
+            drop-shadow(0 0 7px hsl(var(--retro-cyan) / 0.65));
+  }
+
   .glow-sm, .glow-md {
     box-shadow: none;
   }
@@ -249,6 +299,21 @@
 @keyframes retro-bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
+}
+
+@keyframes smart-field-breathe {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.24); }
+}
+
+@keyframes smart-field-gate {
+  0%, 100% { transform: scale(1); opacity: 0.42; }
+  50% { transform: scale(1.08); opacity: 0.78; }
+}
+
+@keyframes smart-field-ring {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
 }
 
 /* Custom scrollbar - pixel style */

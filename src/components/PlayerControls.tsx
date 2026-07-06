@@ -33,6 +33,7 @@ const PlayerControls = ({
                             onProgressChange, onVolumeChange,
                         }: PlayerControlsProps) => {
     const sfx = useRetroSfx();
+    const isSmartShuffle = shuffleMode === "smart";
 
     const PausePixel = (props: SVGProps<SVGSVGElement>) => (
         <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
@@ -80,16 +81,15 @@ const PlayerControls = ({
                 <div className="flex items-center justify-center gap-3 sm:gap-5">
                     <button
                         onClick={() => { sfx("toggle"); onShuffleCycle(); }}
+                        aria-label={isSmartShuffle ? "Smart shuffle activado" : shuffleMode === "shuffle" ? "Shuffle activado" : "Shuffle desactivado"}
+                        title={isSmartShuffle ? "Smart Shuffle power field" : shuffleMode === "shuffle" ? "Shuffle activado" : "Shuffle desactivado"}
                         className={`retro-btn-secondary !p-2 ${
                             shuffleMode === "shuffle" ? "!border-primary !text-primary" :
-                            shuffleMode === "smart" ? "!border-accent !text-accent" : ""
+                            isSmartShuffle ? "smart-shuffle-power-field !border-accent !text-accent" : ""
                         }`}
                     >
-                        <span className="relative block">
+                        <span className={`${isSmartShuffle ? "smart-shuffle-core " : ""}relative block`}>
                             <PixelIcon icon={Shuffle} size="sm" />
-                            {shuffleMode === "smart" && (
-                                <span className="absolute -top-2 -right-1 font-display text-[7px] leading-none text-accent">★</span>
-                            )}
                         </span>
                     </button>
 

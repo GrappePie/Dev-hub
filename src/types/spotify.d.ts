@@ -51,7 +51,7 @@ interface SpotifyWebTrack {
     duration_ms: number;
     type?: string;
     is_local?: boolean;
-    artists?: Array<{ name: string }>;
+    artists?: Array<{ id?: string; name: string; uri?: string }>;
     album?: {
         name?: string;
         images?: Array<{

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
+import { getNextShuffleMode } from "@/lib/shuffleMode";
 import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
 
 const YOUTUBE_IFRAME_API = "https://www.youtube.com/iframe_api";
@@ -1124,7 +1125,7 @@ export const useYoutubePlayer = () => {
 
     const cycleShuffle = useCallback(() => {
         setShuffleMode((prev) => {
-            const next: "off" | "shuffle" | "smart" = prev === "off" ? "shuffle" : prev === "shuffle" ? "smart" : "off";
+            const next = getNextShuffleMode(prev);
             shuffleModeRef.current = next;
             return next;
         });

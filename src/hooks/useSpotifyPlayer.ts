@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
+import { getNextShuffleMode } from "@/lib/shuffleMode";
+import { getSmartShuffleCandidate, getSpotifyArtistTopTracksPath, getSpotifyRecommendationsPath } from "@/lib/spotifySmartShuffle";
 
 const STORAGE = {
     ACCESS_TOKEN: "spotify_access_token",
@@ -66,6 +68,7 @@ interface AuthFeedback {
 interface SpotifyArtist {
     id?: string;
     name: string;
+    uri?: string;
 }
 
 interface SpotifyImage {
@@ -267,6 +270,7 @@ const mapTrack = (track?: SpotifyWebTrack | null): CurrentTrack | null => {
         duration: formatMs(track.duration_ms || 0),
         albumArt: track.album?.images?.[0]?.url || fallbackAlbumArt,
         externalUrl: track.external_urls?.spotify,
+        artistId: (track.artists || []).find((artist) => artist.id)?.id,
     };
 };
 
@@ -1004,15 +1008,16 @@ export const useSpotifyPlayer = () => {
     }, []);
 
     const queueRecommendation = useCallback(
-        async (seedTrackId: string) => {
-            interface SpotifyRec { id: string; uri: string }
-            interface SpotifyRecsResponse { tracks?: SpotifyRec[] }
-            const response = await api(`/recommendations?seed_tracks=${seedTrackId}&limit=5`);
+        async (track: CurrentTrack) => {
+            interface SpotifyRecommendationTrack { id: string; uri?: string }
+            interface SpotifyRecommendationsResponse { tracks?: SpotifyRecommendationTrack[] }
+            let response = await api(getSpotifyRecommendationsPath(track.id), {}, { silent: true });
+            if (!response.ok && track.artistId) {
+                response = await api(getSpotifyArtistTopTracksPath(track.artistId), {}, { silent: true });
+            }
             if (!response.ok) return;
-            const data = (await response.json()) as SpotifyRecsResponse;
-            const candidates = (data.tracks || []).filter((t) => t.id !== seedTrackId);
-            if (!candidates.length) return;
-            const pick = candidates[Math.floor(Math.random() * candidates.length)];
+            const data = (await response.json()) as SpotifyRecommendationsResponse;
+            const pick = getSmartShuffleCandidate(data.tracks || [], track.id);
             if (!pick?.uri) return;
             await executeWithDeviceRecovery((deviceId) =>
                 api(
@@ -1033,12 +1038,11 @@ export const useSpotifyPlayer = () => {
         if (shuffleMode !== "smart" || !currentTrack?.id) return;
         if (currentTrack.id === prevSmartTrackIdRef.current) return;
         prevSmartTrackIdRef.current = currentTrack.id;
-        void queueRecommendation(currentTrack.id);
+        void queueRecommendation(currentTrack);
     }, [currentTrack?.id, shuffleMode, queueRecommendation]);
 
     const cycleShuffle = useCallback(async () => {
-        const next: "off" | "shuffle" | "smart" =
-            shuffleMode === "off" ? "shuffle" : shuffleMode === "shuffle" ? "smart" : "off";
+        const next = getNextShuffleMode(shuffleMode, { smart: true });
         const spotifyNative = next === "shuffle";
         const response = await executeWithDeviceRecovery((deviceId) =>
             api(`/me/player/shuffle?state=${spotifyNative}&device_id=${deviceId}`, { method: "PUT" }, { silent: true })

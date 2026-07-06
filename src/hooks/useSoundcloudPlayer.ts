@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
+import { getNextShuffleMode } from "@/lib/shuffleMode";
 import type { CurrentTrack, ArtistData } from "@/hooks/useSpotifyPlayer";
 
 const SOUNDCLOUD_WIDGET_SCRIPT = "https://w.soundcloud.com/player/api.js";
@@ -866,7 +867,7 @@ export const useSoundcloudPlayer = () => {
     const closeExpandedPlaylist = useCallback(() => setExpandedPlaylist(null), []);
 
     const toggleShuffle = useCallback(() =>
-        setShuffleMode(prev => prev === "off" ? "shuffle" : prev === "shuffle" ? "smart" : "off"),
+        setShuffleMode(getNextShuffleMode),
     []);
 
     const playPlaylist = useCallback(
