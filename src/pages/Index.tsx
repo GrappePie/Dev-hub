@@ -80,7 +80,14 @@ const Index = () => {
 
     const activePlatform = isLoggedIn ? "spotify" : isSoundcloudMode ? "soundcloud" : isYouTubeMode ? "youtube" : null;
     const { analyser, ytCaptureActive: captureActive, requestYouTubeCapture } = useAudioAnalyser(activePlatform);
-    const { bpm, beatRef } = useBpmDetector(analyser);
+    const analysisTrackId = activePlatform === "spotify"
+        ? spotify.currentTrack?.id ?? null
+        : activePlatform === "soundcloud"
+            ? soundcloud.currentTrack?.id ?? null
+            : activePlatform === "youtube"
+                ? youtube.currentTrack?.id ?? null
+                : null;
+    const { bpm, confidence: bpmConfidence, beatRef } = useBpmDetector(analyser, analysisTrackId);
 
     useEffect(() => {
         if (showCharacterSelect || isCharacterVisible) {
@@ -830,6 +837,7 @@ const Index = () => {
                             analyser={analyser}
                             onRequestCapture={!captureActive ? requestYouTubeCapture : undefined}
                             bpm={bpm}
+                            bpmConfidence={bpmConfidence}
                             beatSignal={beatRef}
                         />
                     ) : isSoundcloudMode ? (
@@ -892,6 +900,7 @@ const Index = () => {
                             onToggleCritterComments={() => setCritterCommentsMode(m => !m)}
                             onCritterCommentTrigger={handleCritterCommentTrigger}
                             bpm={bpm}
+                            bpmConfidence={bpmConfidence}
                             beatSignal={beatRef}
                         />
                     ) : isYouTubeMode ? (
@@ -927,6 +936,7 @@ const Index = () => {
                             onToggleVideoMode={youtube.toggleVideoMode}
                             onTogglePipMode={youtube.togglePipMode}
                             bpm={bpm}
+                            bpmConfidence={bpmConfidence}
                             beatSignal={beatRef}
                         />
                     ) : isFileaMode ? (

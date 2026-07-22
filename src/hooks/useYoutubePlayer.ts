@@ -887,8 +887,8 @@ export const useYoutubePlayer = () => {
     useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
         const player = new window.YT.Player(playerHostEl, {
-            width: "0",
-            height: "0",
+            width: "200",
+            height: "200",
             videoId: DEFAULT_VIDEO_ID,
             playerVars: {
                 autoplay: 0,
@@ -951,9 +951,9 @@ export const useYoutubePlayer = () => {
         const player = playerRef.current;
         if (!player || !playerReady) return;
         if (!showVideo) {
-            player.setSize(1, 1);
+            player.setSize(200, 200);
         } else if (pipMode) {
-            player.setSize(288, 162);
+            player.setSize(356, 200);
         } else {
             // Fill the image slot (square container ~240-272px depending on breakpoint)
             player.setSize(272, 272);

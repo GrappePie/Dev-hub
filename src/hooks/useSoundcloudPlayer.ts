@@ -7,11 +7,9 @@ import type { CurrentTrack, ArtistData } from "@/hooks/useSpotifyPlayer";
 const SOUNDCLOUD_WIDGET_SCRIPT = "https://w.soundcloud.com/player/api.js";
 const SOUNDCLOUD_API_BASE = "https://api.soundcloud.com";
 const SOUNDCLOUD_AUTHORIZE_URL = "https://secure.soundcloud.com/authorize";
-const SOUNDCLOUD_TOKEN_URL = "https://secure.soundcloud.com/oauth/token";
 const SOUNDCLOUD_STATE_PREFIX = "sc_";
 
 const SOUNDCLOUD_CLIENT_ID = import.meta.env.VITE_SOUNDCLOUD_CLIENT_ID || "";
-const SOUNDCLOUD_CLIENT_SECRET = import.meta.env.VITE_SOUNDCLOUD_CLIENT_SECRET || "";
 const DEFAULT_REDIRECT_URI = `${window.location.origin}${window.location.pathname}`;
 const SOUNDCLOUD_REDIRECT_URI = import.meta.env.VITE_SOUNDCLOUD_REDIRECT_URI || DEFAULT_REDIRECT_URI;
 const DEFAULT_TRACK_URL = "https://soundcloud.com/forss/flickermood";
@@ -21,6 +19,7 @@ const STORAGE = {
     REFRESH_TOKEN: "sc_refresh_token",
     EXPIRES_AT: "sc_token_expires_at",
     OAUTH_STATE: "sc_oauth_state",
+    PKCE_VERIFIER: "sc_pkce_verifier",
 } as const;
 
 interface SoundcloudTokenResponse {
@@ -121,13 +120,21 @@ const upscaleArtwork = (url?: string | null) => {
     return url.replace("-large.", "-t500x500.");
 };
 
-const generateRandomString = (length: number) => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let text = "";
-    for (let i = 0; i < length; i++) {
-        text += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return text;
+const toBase64Url = (bytes: Uint8Array) => {
+    let binary = "";
+    bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+};
+
+const generateRandomString = (byteLength: number) => {
+    const bytes = new Uint8Array(byteLength);
+    crypto.getRandomValues(bytes);
+    return toBase64Url(bytes);
+};
+
+const createCodeChallenge = async (verifier: string) => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return toBase64Url(new Uint8Array(digest));
 };
 
 const appendClientId = (path: string, includeClientId = true) => {
@@ -268,6 +275,7 @@ export const useSoundcloudPlayer = () => {
         localStorage.removeItem(STORAGE.REFRESH_TOKEN);
         localStorage.removeItem(STORAGE.EXPIRES_AT);
         localStorage.removeItem(STORAGE.OAUTH_STATE);
+        localStorage.removeItem(STORAGE.PKCE_VERIFIER);
     }, []);
 
     const applyTokenResponse = useCallback((data: SoundcloudTokenResponse, fallbackRefreshToken?: string | null) => {
@@ -288,15 +296,10 @@ export const useSoundcloudPlayer = () => {
     }, []);
 
     const tokenRequest = useCallback(async (body: Record<string, string>) => {
-        if (!SOUNDCLOUD_CLIENT_ID || !SOUNDCLOUD_CLIENT_SECRET) {
-            throw new Error("Missing SoundCloud credentials");
-        }
-        const response = await fetch(SOUNDCLOUD_TOKEN_URL, {
+        const response = await fetch("/api/soundcloud/token", {
             method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-                client_id: SOUNDCLOUD_CLIENT_ID,
-                client_secret: SOUNDCLOUD_CLIENT_SECRET,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
                 redirect_uri: SOUNDCLOUD_REDIRECT_URI,
                 ...body,
             }),
@@ -452,15 +455,21 @@ export const useSoundcloudPlayer = () => {
     const completeOAuthLogin = useCallback(
         async (code: string, state?: string | null) => {
             const expectedState = localStorage.getItem(STORAGE.OAUTH_STATE);
-            if (expectedState && state && expectedState !== state) {
+            if (!expectedState || !state || expectedState !== state) {
                 throw new Error("SoundCloud OAuth state mismatch");
+            }
+            const codeVerifier = localStorage.getItem(STORAGE.PKCE_VERIFIER);
+            if (!codeVerifier) {
+                throw new Error("SoundCloud PKCE verifier missing; restart the login flow");
             }
             const token = await tokenRequest({
                 grant_type: "authorization_code",
                 code,
+                code_verifier: codeVerifier,
             });
             applyTokenResponse(token);
             localStorage.removeItem(STORAGE.OAUTH_STATE);
+            localStorage.removeItem(STORAGE.PKCE_VERIFIER);
             setStatusText("Cuenta de SoundCloud conectada.");
             await fetchLibrary();
         },
@@ -468,17 +477,20 @@ export const useSoundcloudPlayer = () => {
     );
 
     const startLogin = useCallback(async () => {
-        if (!SOUNDCLOUD_CLIENT_ID || !SOUNDCLOUD_CLIENT_SECRET) {
+        if (!SOUNDCLOUD_CLIENT_ID) {
             toast({
                 variant: "destructive",
                 title: "Config faltante",
-                description: "Define VITE_SOUNDCLOUD_CLIENT_ID y VITE_SOUNDCLOUD_CLIENT_SECRET.",
+                description: "Define VITE_SOUNDCLOUD_CLIENT_ID en el frontend y configura el secreto en el servidor.",
             });
             return;
         }
 
         const oauthState = `${SOUNDCLOUD_STATE_PREFIX}${generateRandomString(24)}`;
+        const codeVerifier = generateRandomString(64);
+        const codeChallenge = await createCodeChallenge(codeVerifier);
         localStorage.setItem(STORAGE.OAUTH_STATE, oauthState);
+        localStorage.setItem(STORAGE.PKCE_VERIFIER, codeVerifier);
         setIsAuthLoading(true);
 
         const authUrl = new URL(SOUNDCLOUD_AUTHORIZE_URL);
@@ -488,6 +500,8 @@ export const useSoundcloudPlayer = () => {
             redirect_uri: SOUNDCLOUD_REDIRECT_URI,
             state: oauthState,
             scope: "*",
+            code_challenge: codeChallenge,
+            code_challenge_method: "S256",
         }).toString();
 
         const width = 520;

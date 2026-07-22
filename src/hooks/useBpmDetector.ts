@@ -11,6 +11,32 @@ const MIN_ENERGY = 20;
 // Reject a new raw BPM if it deviates more than this fraction from current estimate.
 // Allows ~1 BPM drift at 120 BPM before being accepted each beat.
 const MAX_BPM_DRIFT = 0.18;
+const CANONICAL_MIN_BPM = 80;
+const CANONICAL_MAX_BPM = 160;
+
+const normalizeTempo = (raw: number, current: number | null) => {
+    const candidates = [raw / 2, raw, raw * 2].filter((candidate) => candidate >= MIN_BPM && candidate <= MAX_BPM);
+    if (!candidates.length) return raw;
+    if (current !== null) {
+        return candidates.reduce((best, candidate) =>
+            Math.abs(candidate - current) < Math.abs(best - current) ? candidate : best
+        );
+    }
+    const canonical = candidates.filter((candidate) => candidate >= CANONICAL_MIN_BPM && candidate <= CANONICAL_MAX_BPM);
+    return (canonical.length ? canonical : candidates).reduce((best, candidate) =>
+        Math.abs(candidate - 120) < Math.abs(best - 120) ? candidate : best
+    );
+};
+
+const intervalConfidence = (intervals: number[], median: number) => {
+    if (!intervals.length || median <= 0) return 0;
+    const medianDeviation = [...intervals]
+        .map((interval) => Math.abs(interval - median))
+        .sort((a, b) => a - b)[Math.floor(intervals.length / 2)];
+    const consistency = Math.max(0, 1 - (medianDeviation / median) * 4);
+    const sampleStrength = Math.min(1, intervals.length / 10);
+    return Math.round(consistency * sampleStrength * 100) / 100;
+};
 
 /**
  * Detects BPM in real time from an AnalyserNode using spectral flux (onset strength).
@@ -19,8 +45,9 @@ const MAX_BPM_DRIFT = 0.18;
  * more than MAX_BPM_DRIFT (18%) from the current smoothed value are discarded.
  * This prevents hi-hats, snares, or transient noise from shifting the tempo.
  */
-export const useBpmDetector = (analyser: AnalyserNode | null) => {
+export const useBpmDetector = (analyser: AnalyserNode | null, resetKey: string | null = null) => {
     const [bpm, setBpm] = useState<number | null>(null);
+    const [confidence, setConfidence] = useState(0);
     const beatRef = useRef(0);
 
     const rafRef = useRef(0);
@@ -34,15 +61,16 @@ export const useBpmDetector = (analyser: AnalyserNode | null) => {
     useEffect(() => {
         cancelAnimationFrame(rafRef.current);
 
-        if (!analyser) {
-            setBpm(null);
-            smoothBpmRef.current = null;
-            lastDisplayedBpm.current = null;
-            onsetHistRef.current = [];
-            beatTimesRef.current = [];
-            prevEnergyRef.current = 0;
-            return;
-        }
+        setBpm(null);
+        setConfidence(0);
+        smoothBpmRef.current = null;
+        lastDisplayedBpm.current = null;
+        onsetHistRef.current = [];
+        beatTimesRef.current = [];
+        lastBeatTimeRef.current = 0;
+        prevEnergyRef.current = 0;
+
+        if (!analyser) return;
 
         const bufLen = analyser.frequencyBinCount;
         const data = new Uint8Array(bufLen);
@@ -87,9 +115,10 @@ export const useBpmDetector = (analyser: AnalyserNode | null) => {
                         }
                         intervals.sort((a, b) => a - b);
                         const median = intervals[Math.floor(intervals.length / 2)];
-                        const raw = 60000 / median;
+                        const raw = normalizeTempo(60000 / median, smoothBpmRef.current);
 
                         if (raw >= MIN_BPM && raw <= MAX_BPM) {
+                            setConfidence(intervalConfidence(intervals, median));
                             const current = smoothBpmRef.current;
 
                             // Rejection filter: once we have an estimate, discard readings
@@ -122,7 +151,7 @@ export const useBpmDetector = (analyser: AnalyserNode | null) => {
 
         rafRef.current = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(rafRef.current);
-    }, [analyser]);
+    }, [analyser, resetKey]);
 
-    return { bpm, beatRef };
+    return { bpm, confidence, beatRef };
 };

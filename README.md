@@ -1,73 +1,63 @@
-# React + TypeScript + Vite
+# Dev Hub
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Dev Hub es un reproductor musical pixel-art que reúne Spotify, SoundCloud, YouTube y archivos locales en una sola interfaz. Incluye búsqueda, bibliotecas y colas por plataforma, comentarios, visualizador de audio y detección de BPM en tiempo real.
 
-Currently, two official plugins are available:
+## Desarrollo local
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Requisitos: Node.js 20 o posterior y npm.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+La aplicación abre en `http://127.0.0.1:5500`. Configura en cada proveedor esa misma URL como callback durante el desarrollo.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Variables de entorno
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Las variables `VITE_*` se incorporan al JavaScript público. Solo deben contener identificadores o claves diseñadas para usarse desde el navegador.
+
+```dotenv
+VITE_SPOTIFY_CLIENT_ID=
+VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5500/
+VITE_SOUNDCLOUD_CLIENT_ID=
+VITE_SOUNDCLOUD_REDIRECT_URI=http://127.0.0.1:5500/
+VITE_YOUTUBE_API_KEY=
+VITE_GOOGLE_CLIENT_ID=
+
+# Opcional: permite usar otro cliente en el servidor.
+# SOUNDCLOUD_CLIENT_ID=
+SOUNDCLOUD_CLIENT_SECRET=
+SOUNDCLOUD_REDIRECT_URI=http://127.0.0.1:5500/
 ```
+
+`SOUNDCLOUD_CLIENT_SECRET` es exclusivamente de servidor. El navegador envía el código OAuth a `/api/soundcloud/token`; el middleware de Vite atiende esa ruta en desarrollo y `api/soundcloud/token.ts` la expone como función serverless en producción. El backend reutiliza `VITE_SOUNDCLOUD_CLIENT_ID`, ya que el client ID es público; `SOUNDCLOUD_CLIENT_ID` solo es necesario si quieres sobrescribirlo.
+
+La aplicación completa no debe desplegarse en GitHub Pages: Pages solo publica archivos estáticos y no puede ejecutar `/api/soundcloud/token`. Usa un hosting con funciones serverless (por ejemplo Vercel) o configura un backend externo antes de habilitar el despliegue de producción.
+
+Antes de publicar:
+
+- Rota el secreto de SoundCloud si estuvo presente en algún build público.
+- Restringe `VITE_YOUTUBE_API_KEY` a los dominios de producción y desarrollo autorizados, y limita su uso a YouTube Data API v3.
+- Configura `SOUNDCLOUD_REDIRECT_URI` con el mismo valor exacto registrado en SoundCloud.
+- Añade las variables server-only a la configuración del proveedor de despliegue; no las expongas con prefijo `VITE_`.
+
+## Comandos
+
+```bash
+npm run dev       # servidor Vite con endpoint OAuth local
+npm run test      # pruebas unitarias
+npm run lint      # ESLint
+npm run build     # build de producción
+npm run preview   # previsualiza el frontend; OAuth requiere una función /api activa
+```
+
+## Arquitectura
+
+- React 18 + TypeScript + Vite
+- TanStack Router y TanStack Query
+- Tailwind CSS + Radix UI
+- APIs Web Playback/OAuth de Spotify, SoundCloud Widget/API y YouTube IFrame/Data API
+
+Las rutas viven en `src/routes`; `src/routeTree.gen.ts` se genera automáticamente mediante el plugin de TanStack Router.

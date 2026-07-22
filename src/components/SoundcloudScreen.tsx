@@ -85,6 +85,7 @@ interface SoundcloudScreenProps {
     onToggleCritterComments?: () => void;
     onCritterCommentTrigger?: (comment: { body: string; username: string }) => void;
     bpm?: number | null;
+    bpmConfidence?: number;
     beatSignal?: import("react").MutableRefObject<number>;
 }
 
@@ -147,6 +148,7 @@ const SoundcloudScreen = ({
     onToggleCritterComments,
     onCritterCommentTrigger,
     bpm,
+    bpmConfidence,
     beatSignal,
 }: SoundcloudScreenProps) => {
     const sfx = useRetroSfx();
@@ -386,7 +388,7 @@ const SoundcloudScreen = ({
                         )}
                     </div>
 
-                    <Visualizer isPlaying={isPlaying} analyser={analyser} onRequestCapture={onRequestCapture} bpm={bpm} beatSignal={beatSignal} />
+                    <Visualizer isPlaying={isPlaying} analyser={analyser} onRequestCapture={onRequestCapture} bpm={bpm} bpmConfidence={bpmConfidence} beatSignal={beatSignal} />
                 </div>
 
                 <div className="space-y-5">
