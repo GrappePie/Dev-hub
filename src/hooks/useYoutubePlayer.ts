@@ -9,13 +9,15 @@ const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
-const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
+const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
+const YOUTUBE_SCOPE_VERSION = "2";
 const VOLUME_STORAGE_KEY = "mh_yt_vol";
 
 const STORAGE = {
     ACCESS_TOKEN: "yt_access_token",
     EXPIRES_AT: "yt_token_expires_at",
     ACCOUNT_NAME: "yt_account_name",
+    SCOPE_VERSION: "yt_scope_version",
 } as const;
 
 export type YouTubeLibrarySection = "playlists" | "likes" | "watchLater";
@@ -277,6 +279,8 @@ export const useYoutubePlayer = () => {
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [showVideo, setShowVideo] = useState(false);
     const [pipMode, setPipMode] = useState(false);
+    const [currentRating, setCurrentRating] = useState<"like" | "dislike" | "none">("none");
+    const [ratingLoading, setRatingLoading] = useState(false);
 
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
@@ -318,6 +322,7 @@ export const useYoutubePlayer = () => {
         localStorage.removeItem(STORAGE.ACCESS_TOKEN);
         localStorage.removeItem(STORAGE.EXPIRES_AT);
         localStorage.removeItem(STORAGE.ACCOUNT_NAME);
+        localStorage.removeItem(STORAGE.SCOPE_VERSION);
         likesPlaylistIdRef.current = null;
         watchLaterPlaylistIdRef.current = null;
         fetchedLibraryRef.current = false;
@@ -758,7 +763,8 @@ export const useYoutubePlayer = () => {
         const token = localStorage.getItem(STORAGE.ACCESS_TOKEN);
         const expiresAt = Number(localStorage.getItem(STORAGE.EXPIRES_AT) || 0);
         const storedName = localStorage.getItem(STORAGE.ACCOUNT_NAME) || "";
-        if (!token || !expiresAt || Date.now() >= expiresAt) {
+        const scopeVersion = localStorage.getItem(STORAGE.SCOPE_VERSION);
+        if (!token || !expiresAt || Date.now() >= expiresAt || scopeVersion !== YOUTUBE_SCOPE_VERSION) {
             clearAuth();
             return;
         }
@@ -1002,6 +1008,7 @@ export const useYoutubePlayer = () => {
             setTokenExpiresAt(expiresAt);
             localStorage.setItem(STORAGE.ACCESS_TOKEN, response.access_token);
             localStorage.setItem(STORAGE.EXPIRES_AT, String(expiresAt));
+            localStorage.setItem(STORAGE.SCOPE_VERSION, YOUTUBE_SCOPE_VERSION);
             fetchedLibraryRef.current = false;
             void fetchLibrary().finally(() => {
                 setIsAuthLoading(false);
@@ -1160,6 +1167,66 @@ export const useYoutubePlayer = () => {
         if (player) player.setVolume(Math.round(next * 100));
     }, []);
 
+    useEffect(() => {
+        let active = true;
+        setCurrentRating("none");
+        const videoId = currentTrack?.id.startsWith("yt-") ? currentTrack.id.slice(3) : currentTrack?.id;
+        if (!videoId || !accessToken) return () => { active = false; };
+
+        void youtubeApiGet(
+            "/videos/getRating",
+            { id: videoId },
+            { auth: true, includeApiKey: false, silent: true }
+        ).then(async (response) => {
+            if (!active || !response.ok) return;
+            const payload = await response.json() as { items?: Array<{ rating?: "like" | "dislike" | "none" }> };
+            if (active) setCurrentRating(payload.items?.[0]?.rating || "none");
+        });
+
+        return () => { active = false; };
+    }, [accessToken, currentTrack?.id, youtubeApiGet]);
+
+    const rateCurrentTrack = useCallback(async (rating: "like" | "dislike") => {
+        const videoId = currentTrack?.id.startsWith("yt-") ? currentTrack.id.slice(3) : currentTrack?.id;
+        if (!videoId) {
+            toast({ title: "Sin track", description: "Selecciona una canción antes de calificarla." });
+            return;
+        }
+        if (!accessTokenRef.current) {
+            toast({ title: "Conecta YouTube", description: "Conecta tu cuenta para guardar Me gusta o No me gusta." });
+            return;
+        }
+
+        const nextRating = currentRating === rating ? "none" : rating;
+        const url = new URL(`${YOUTUBE_API_BASE}/videos/rate`);
+        url.searchParams.set("id", videoId);
+        url.searchParams.set("rating", nextRating);
+        setRatingLoading(true);
+        try {
+            const response = await fetch(url.toString(), {
+                method: "POST",
+                headers: { Authorization: `Bearer ${accessTokenRef.current}` },
+            });
+            if (!response.ok) {
+                toast({
+                    variant: "destructive",
+                    title: "No se pudo guardar",
+                    description: response.status === 403
+                        ? "Vuelve a conectar YouTube para autorizar likes y dislikes."
+                        : `YouTube respondió con el error ${response.status}.`,
+                });
+                return;
+            }
+            setCurrentRating(nextRating);
+            toast({
+                title: nextRating === "none" ? "Calificación eliminada" : nextRating === "like" ? "Te gusta" : "No te gusta",
+                description: currentTrack.title,
+            });
+        } finally {
+            setRatingLoading(false);
+        }
+    }, [currentRating, currentTrack]);
+
     const shareCurrent = useCallback(async () => {
         const target = currentTrack?.externalUrl;
         if (!target) {
@@ -1221,6 +1288,8 @@ export const useYoutubePlayer = () => {
         shuffleMode,
         repeatMode,
         volume,
+        currentRating,
+        ratingLoading,
         durationMs,
         progress,
         currentTime: formatMs(positionMs),
@@ -1255,6 +1324,7 @@ export const useYoutubePlayer = () => {
         cycleRepeat,
         seekToProgress,
         setVolumeLevel,
+        rateCurrentTrack,
         shareCurrent,
         playQueueTrack,
         refreshQueue,

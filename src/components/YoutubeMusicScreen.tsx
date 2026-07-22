@@ -12,6 +12,17 @@ import { Shuffle } from "pixelarticons/react/Shuffle";
 import { Repeat } from "pixelarticons/react/Repeat";
 import { Link } from "pixelarticons/react/Link";
 import { PictureInPicture } from "pixelarticons/react/PictureInPicture";
+import { ThumbsUp } from "pixelarticons/react/ThumbsUp";
+import { ThumbsDown } from "pixelarticons/react/ThumbsDown";
+import { MoreVertical } from "pixelarticons/react/MoreVertical";
+import { ExternalLink } from "pixelarticons/react/ExternalLink";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type YoutubeView = "home" | "library" | "likes" | "playlist";
 
@@ -32,6 +43,8 @@ interface YoutubeMusicScreenProps {
     isPlaying: boolean;
     progress: number;
     volume: number;
+    currentRating: "like" | "dislike" | "none";
+    ratingLoading: boolean;
     shuffleMode: "off" | "shuffle" | "smart";
     repeatMode: number;
     currentTime: string;
@@ -46,6 +59,7 @@ interface YoutubeMusicScreenProps {
     onRepeatToggle: () => void;
     onSeek: (value: number) => void;
     onVolume: (value: number) => void;
+    onRate: (rating: "like" | "dislike") => void;
     onShare: () => void;
     onPlayLibraryItem: (item: YouTubeLibraryItem) => void | Promise<void>;
     onPlaySearchTrack: (track: YouTubeTrack) => void;
@@ -82,6 +96,8 @@ const YoutubeMusicScreen = ({
     isPlaying,
     progress,
     volume,
+    currentRating,
+    ratingLoading,
     shuffleMode,
     repeatMode,
     currentTime,
@@ -96,6 +112,7 @@ const YoutubeMusicScreen = ({
     onRepeatToggle,
     onSeek,
     onVolume,
+    onRate,
     onShare,
     onPlayLibraryItem,
     onPlaySearchTrack,
@@ -277,6 +294,8 @@ const YoutubeMusicScreen = ({
                     isPlaying={isPlaying}
                     progress={progress}
                     volume={volume}
+                    currentRating={currentRating}
+                    ratingLoading={ratingLoading}
                     shuffleMode={shuffleMode}
                     repeatMode={repeatMode}
                     currentTime={currentTime}
@@ -288,6 +307,7 @@ const YoutubeMusicScreen = ({
                     onRepeatToggle={onRepeatToggle}
                     onSeek={onSeek}
                     onVolume={onVolume}
+                    onRate={onRate}
                     onShare={onShare}
                 />
             </section>
@@ -513,11 +533,13 @@ const NowPlayingDock = ({ currentTrack, playerHostRef, pipMode, onTogglePipMode,
     </aside>
 );
 
-const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, shuffleMode, repeatMode, currentTime, totalTime, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onShare }: {
+const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, currentRating, ratingLoading, shuffleMode, repeatMode, currentTime, totalTime, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onRate, onShare }: {
     currentTrack: CurrentTrack | null;
     isPlaying: boolean;
     progress: number;
     volume: number;
+    currentRating: "like" | "dislike" | "none";
+    ratingLoading: boolean;
     shuffleMode: "off" | "shuffle" | "smart";
     repeatMode: number;
     currentTime: string;
@@ -529,6 +551,7 @@ const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, shuffleMo
     onRepeatToggle: () => void;
     onSeek: (value: number) => void;
     onVolume: (value: number) => void;
+    onRate: (rating: "like" | "dislike") => void;
     onShare: () => void;
 }) => (
     <footer className="youtube-music-playerbar">
@@ -547,6 +570,44 @@ const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, shuffleMo
             <div className="youtube-music-timeline"><time>{currentTime}</time><input aria-label="Progreso" type="range" min="0" max="100" value={progress} onChange={(event) => onSeek(Number(event.target.value))} /><time>{totalTime}</time></div>
         </div>
         <div className="youtube-music-player-utils">
+            <button
+                className={currentRating === "like" ? "is-on" : ""}
+                disabled={!currentTrack || ratingLoading}
+                onClick={() => onRate("like")}
+                title="Me gusta"
+                aria-label="Me gusta"
+            ><PixelIcon icon={ThumbsUp} size="sm" /></button>
+            <button
+                className={currentRating === "dislike" ? "is-on" : ""}
+                disabled={!currentTrack || ratingLoading}
+                onClick={() => onRate("dislike")}
+                title="No me gusta"
+                aria-label="No me gusta"
+            ><PixelIcon icon={ThumbsDown} size="sm" /></button>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <button disabled={!currentTrack} title="Más opciones" aria-label="Más opciones">
+                        <PixelIcon icon={MoreVertical} size="sm" />
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="end" className="youtube-music-more-menu">
+                    <DropdownMenuItem onSelect={() => onRate("like")}>
+                        <PixelIcon icon={ThumbsUp} size="sm" />
+                        {currentRating === "like" ? "QUITAR ME GUSTA" : "ME GUSTA"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onRate("dislike")}>
+                        <PixelIcon icon={ThumbsDown} size="sm" />
+                        {currentRating === "dislike" ? "QUITAR NO ME GUSTA" : "NO ME GUSTA"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={onShare}>
+                        <PixelIcon icon={Link} size="sm" /> COMPARTIR
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => currentTrack?.externalUrl && window.open(currentTrack.externalUrl, "_blank", "noopener,noreferrer")}>
+                        <PixelIcon icon={ExternalLink} size="sm" /> ABRIR EN YOUTUBE
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
             <button onClick={onShare} title="Compartir"><PixelIcon icon={Link} size="sm" /></button>
             <span>VOL</span>
             <input aria-label="Volumen" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => onVolume(Number(event.target.value))} />

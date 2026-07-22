@@ -923,6 +923,8 @@ const Index = () => {
                             isPlaying={youtube.isPlaying}
                             progress={youtube.progress}
                             volume={youtube.volume}
+                            currentRating={youtube.currentRating}
+                            ratingLoading={youtube.ratingLoading}
                             shuffleMode={youtube.shuffleMode}
                             repeatMode={youtube.repeatMode}
                             currentTime={youtube.currentTime}
@@ -937,6 +939,7 @@ const Index = () => {
                             onRepeatToggle={youtube.cycleRepeat}
                             onSeek={youtube.seekToProgress}
                             onVolume={youtube.setVolumeLevel}
+                            onRate={(rating) => void youtube.rateCurrentTrack(rating)}
                             onShare={() => void youtube.shareCurrent()}
                             onPlayLibraryItem={(item) => void youtube.playLibraryItem(item)}
                             onPlaySearchTrack={youtube.playSearchTrack}
