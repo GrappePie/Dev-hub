@@ -254,6 +254,8 @@ export const useYoutubePlayer = () => {
     const shuffleModeRef = useRef<"off" | "shuffle" | "smart">("off");
     const pendingTrackRef = useRef<YouTubeTrack | null>(null);
     const fetchedLibraryRef = useRef(false);
+    const playTrackRef = useRef<(track: YouTubeTrack) => void>(() => undefined);
+    const handleTrackEndRef = useRef<() => void>(() => undefined);
 
     const [apiReady, setApiReady] = useState(false);
     const [playerReady, setPlayerReady] = useState(false);
@@ -268,6 +270,7 @@ export const useYoutubePlayer = () => {
     const [shuffleMode, setShuffleMode] = useState<"off" | "shuffle" | "smart">("off");
     const [repeatMode, setRepeatMode] = useState<0 | 1 | 2>(0);
     const [volume, setVolume] = useState(readStoredVolume);
+    const volumeRef = useRef(volume);
     const [durationMs, setDurationMs] = useState(0);
     const [positionMs, setPositionMs] = useState(0);
     const [comments, setComments] = useState<YouTubeComment[]>([]);
@@ -883,6 +886,14 @@ export const useYoutubePlayer = () => {
     }, [playQueueIndex, canSearch, youtubeApiGet, mapSearchResults]);
 
     useEffect(() => {
+        playTrackRef.current = playTrack;
+    }, [playTrack]);
+
+    useEffect(() => {
+        handleTrackEndRef.current = handleTrackEnd;
+    }, [handleTrackEnd]);
+
+    useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
         const player = new window.YT.Player(playerHostEl, {
             width: "200",
@@ -898,12 +909,12 @@ export const useYoutubePlayer = () => {
             events: {
                 onReady: () => {
                     setPlayerReady(true);
-                    player.setVolume(Math.round(volume * 100));
+                    player.setVolume(Math.round(volumeRef.current * 100));
                     setStatusText("YouTube player listo.");
                     if (pendingTrackRef.current) {
                         const pending = pendingTrackRef.current;
                         pendingTrackRef.current = null;
-                        playTrack(pending);
+                        playTrackRef.current(pending);
                     }
                 },
                 onStateChange: (event) => {
@@ -915,7 +926,7 @@ export const useYoutubePlayer = () => {
                         setStatusText("Pausado.");
                     } else if (event.data === window.YT.PlayerState.ENDED) {
                         setIsPlaying(false);
-                        void handleTrackEnd();
+                        void handleTrackEndRef.current();
                     } else if (event.data === window.YT.PlayerState.BUFFERING) {
                         setStatusText("Buffering...");
                     }
@@ -931,7 +942,7 @@ export const useYoutubePlayer = () => {
             player.destroy();
             if (playerRef.current === player) playerRef.current = null;
         };
-    }, [apiReady, playerHostEl, handleTrackEnd, playTrack, volume]);
+    }, [apiReady, playerHostEl]);
 
     useEffect(() => {
         if (!playerReady || !playerRef.current) return;
@@ -1143,6 +1154,7 @@ export const useYoutubePlayer = () => {
     const setVolumeLevel = useCallback((value: number) => {
         const player = playerRef.current;
         const next = Math.max(0, Math.min(1, value));
+        volumeRef.current = next;
         setVolume(next);
         localStorage.setItem(VOLUME_STORAGE_KEY, String(next));
         if (player) player.setVolume(Math.round(next * 100));
