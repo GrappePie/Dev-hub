@@ -42,7 +42,7 @@ export interface ConnectSessionState extends ConnectPlaybackSnapshot {
     activeDeviceId: string;
     activeDeviceName: string;
     updatedAt: number;
-    command?: ConnectRemoteCommand;
+    commands?: ConnectRemoteCommand[];
 }
 
 export interface ConnectApiError {

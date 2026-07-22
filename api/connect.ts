@@ -41,8 +41,20 @@ if not current then return -1 end
 local decoded = cjson.decode(current)
 if decoded.activeDeviceId ~= ARGV[1] then return 0 end
 local proposed = cjson.decode(ARGV[2])
-if decoded.command and (ARGV[4] == '' or decoded.command.id ~= ARGV[4]) then
-  proposed.command = decoded.command
+if decoded.commands then
+  local remaining = {}
+  local acknowledged = ARGV[4] == ''
+  local found = false
+  for _, command in ipairs(decoded.commands) do
+    if acknowledged then
+      table.insert(remaining, command)
+    elseif command.id == ARGV[4] then
+      acknowledged = true
+      found = true
+    end
+  end
+  if ARGV[4] ~= '' and not found then remaining = decoded.commands end
+  if #remaining > 0 then proposed.commands = remaining end
 end
 redis.call("SET", KEYS[1], cjson.encode(proposed), "EX", ARGV[3])
 return 1
@@ -52,7 +64,9 @@ local current = redis.call("GET", KEYS[1])
 if not current then return -1 end
 local decoded = cjson.decode(current)
 if decoded.activeDeviceId == ARGV[1] then return 0 end
-decoded.command = cjson.decode(ARGV[2])
+if not decoded.commands then decoded.commands = {} end
+table.insert(decoded.commands, cjson.decode(ARGV[2]))
+while #decoded.commands > 20 do table.remove(decoded.commands, 1) end
 decoded.version = decoded.version + 1
 redis.call("SET", KEYS[1], cjson.encode(decoded), "EX", ARGV[3])
 return 1

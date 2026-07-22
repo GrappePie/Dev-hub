@@ -61,7 +61,7 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover, onRemot
     const requestRunningRef = useRef(false);
     const wasActiveRef = useRef(false);
     const suspendPublishUntilRef = useRef(0);
-    const processedCommandRef = useRef("");
+    const processedCommandsRef = useRef(new Set<string>());
     const pendingCommandAckRef = useRef("");
 
     const [code, setCode] = useState("");
@@ -100,16 +100,18 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover, onRemot
             onRemoteState(next, extrapolateConnectPosition(next));
             return;
         }
-        if (next.command && next.command.id !== processedCommandRef.current) {
-            processedCommandRef.current = next.command.id;
-            void Promise.resolve(onRemoteCommand(next.command))
-                .then(() => {
-                    pendingCommandAckRef.current = next.command?.id || "";
-                })
-                .catch(() => {
-                    processedCommandRef.current = "";
+        const pendingCommands = (next.commands || []).filter((command) => !processedCommandsRef.current.has(command.id));
+        if (pendingCommands.length) {
+            pendingCommands.forEach((command) => processedCommandsRef.current.add(command.id));
+            void (async () => {
+                try {
+                    for (const command of pendingCommands) await onRemoteCommand(command);
+                    pendingCommandAckRef.current = pendingCommands[pendingCommands.length - 1].id;
+                } catch {
+                    pendingCommands.forEach((command) => processedCommandsRef.current.delete(command.id));
                     setError("No se pudo ejecutar un comando remoto.");
-                });
+                }
+            })();
         }
     }, [deviceId, onRemoteCommand, onRemotePause, onRemoteState]);
 
@@ -245,7 +247,10 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover, onRemot
                 if (current?.activeDeviceId === deviceId && Date.now() >= suspendPublishUntilRef.current) {
                     const ackCommandId = pendingCommandAckRef.current;
                     const next = await publishConnectSession(codeRef.current, deviceId, deviceName, snapshotRef.current, ackCommandId);
-                    if (ackCommandId && next.command?.id !== ackCommandId) pendingCommandAckRef.current = "";
+                    if (ackCommandId && !(next.commands || []).some((command) => command.id === ackCommandId)) {
+                        pendingCommandAckRef.current = "";
+                        processedCommandsRef.current.clear();
+                    }
                     handleRemoteOwner(next);
                 } else {
                     const next = await readConnectSession(codeRef.current);

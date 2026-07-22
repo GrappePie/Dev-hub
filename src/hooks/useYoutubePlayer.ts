@@ -846,6 +846,7 @@ export const useYoutubePlayer = () => {
         (index: number) => {
             const target = queueRef.current[index];
             if (!target) return;
+            queueIndexRef.current = index;
             setQueueIndex(index);
             playTrack(target);
             pushRecent(target);
@@ -1425,9 +1426,20 @@ export const useYoutubePlayer = () => {
         setRepeatMode(state.repeatMode);
         setCurrentTrack(track ? mapCurrentTrack(track) : null);
         setDurationMs(state.durationMs);
-        setPositionMs(remotePositionMs);
+        const now = Date.now();
+        const optimisticSeek = optimisticSeekRef.current;
+        const remoteProgress = state.durationMs ? (remotePositionMs / state.durationMs) * 100 : 0;
+        if (!optimisticSeek || now >= optimisticSeek.until || Math.abs(remoteProgress - optimisticSeek.value) < 2) {
+            optimisticSeekRef.current = null;
+            setPositionMs(remotePositionMs);
+        }
         setIsPlaying(state.isPlaying);
-        setVolumeLevel(state.volume ?? volumeRef.current);
+        const optimisticVolume = optimisticVolumeRef.current;
+        const remoteVolume = state.volume ?? volumeRef.current;
+        if (!optimisticVolume || now >= optimisticVolume.until || Math.abs(remoteVolume - optimisticVolume.value) < 0.015) {
+            optimisticVolumeRef.current = null;
+            setVolumeLevel(remoteVolume);
+        }
         setStatusText(`Controlando ${state.activeDeviceName}.`);
     }, [setVolumeLevel]);
 
@@ -1472,6 +1484,16 @@ export const useYoutubePlayer = () => {
         onRemoteCommand: executeRemoteCommand,
     });
 
+    const optimisticSeekRef = useRef<{ value: number; until: number } | null>(null);
+    const optimisticVolumeRef = useRef<{ value: number; until: number } | null>(null);
+    const remoteSeekTimerRef = useRef<number | null>(null);
+    const remoteVolumeTimerRef = useRef<number | null>(null);
+
+    useEffect(() => () => {
+        if (remoteSeekTimerRef.current !== null) window.clearTimeout(remoteSeekTimerRef.current);
+        if (remoteVolumeTimerRef.current !== null) window.clearTimeout(remoteVolumeTimerRef.current);
+    }, []);
+
     const isRemoteControl = connect.isConnected && !connect.isActiveDevice;
     const remoteTogglePlayPause = useCallback(() => {
         if (isRemoteControl) void connect.sendCommand({ type: "toggle-play" });
@@ -1494,12 +1516,33 @@ export const useYoutubePlayer = () => {
         else cycleRepeat();
     }, [connect, cycleRepeat, isRemoteControl]);
     const remoteSeek = useCallback((value: number) => {
-        if (isRemoteControl) void connect.sendCommand({ type: "seek", value });
-        else seekToProgress(value);
-    }, [connect, isRemoteControl, seekToProgress]);
+        if (!isRemoteControl) {
+            seekToProgress(value);
+            return;
+        }
+        const next = Math.max(0, Math.min(100, value));
+        optimisticSeekRef.current = { value: next, until: Date.now() + 5_000 };
+        setPositionMs(Math.round((next / 100) * durationMs));
+        if (remoteSeekTimerRef.current !== null) window.clearTimeout(remoteSeekTimerRef.current);
+        remoteSeekTimerRef.current = window.setTimeout(() => {
+            remoteSeekTimerRef.current = null;
+            void connect.sendCommand({ type: "seek", value: next });
+        }, 160);
+    }, [connect, durationMs, isRemoteControl, seekToProgress]);
     const remoteVolume = useCallback((value: number) => {
-        if (isRemoteControl) void connect.sendCommand({ type: "volume", value });
-        else setVolumeLevel(value);
+        if (!isRemoteControl) {
+            setVolumeLevel(value);
+            return;
+        }
+        const next = Math.max(0, Math.min(1, value));
+        optimisticVolumeRef.current = { value: next, until: Date.now() + 5_000 };
+        volumeRef.current = next;
+        setVolume(next);
+        if (remoteVolumeTimerRef.current !== null) window.clearTimeout(remoteVolumeTimerRef.current);
+        remoteVolumeTimerRef.current = window.setTimeout(() => {
+            remoteVolumeTimerRef.current = null;
+            void connect.sendCommand({ type: "volume", value: next });
+        }, 160);
     }, [connect, isRemoteControl, setVolumeLevel]);
     const remotePlaySearchTrack = useCallback((track: YouTubeTrack) => {
         if (isRemoteControl) void connect.sendCommand({ type: "play-track", track });
