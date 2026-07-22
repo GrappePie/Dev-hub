@@ -587,6 +587,35 @@ input[type=range]:hover::-webkit-slider-thumb {
 .youtube-music-timeline { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 8px; align-items: center; }
 .youtube-music-timeline time { font-family: 'Press Start 2P', monospace; font-size: 5px; color: hsl(var(--muted-foreground)); }
 .youtube-music-player-utils { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.youtube-connect-trigger { position: relative; }
+.youtube-connect-dot { position: absolute; top: -4px; right: -4px; width: 8px; height: 8px; border: 1px solid hsl(var(--background)); background: hsl(var(--muted-foreground)); box-shadow: 0 0 5px hsl(var(--muted-foreground) / 0.7); }
+.youtube-connect-dot.is-active { background: hsl(var(--accent)); box-shadow: 0 0 7px hsl(var(--accent) / 0.9); }
+.youtube-connect-popover { z-index: 90; width: min(340px, calc(100vw - 24px)); padding: 0; overflow: hidden; border: 3px solid hsl(var(--primary)); border-radius: 0; background: hsl(var(--background)); color: hsl(var(--foreground)); box-shadow: 6px 6px 0 hsl(240 30% 2%); }
+.youtube-connect-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 2px solid hsl(var(--border)); background: hsl(var(--secondary)); }
+.youtube-connect-heading span { font-family: 'Press Start 2P', monospace; font-size: 8px; color: hsl(var(--primary)); }
+.youtube-connect-heading small { font-family: 'Press Start 2P', monospace; font-size: 5px; color: hsl(var(--accent)); }
+.youtube-connect-session, .youtube-connect-setup { display: grid; gap: 11px; padding: 14px; }
+.youtube-connect-setup > p { margin: 0; color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.45; }
+.youtube-connect-action { width: 100%; min-height: 34px; font-size: 7px !important; }
+.youtube-connect-divider { display: flex; align-items: center; gap: 8px; color: hsl(var(--muted-foreground)); font-family: 'Press Start 2P', monospace; font-size: 6px; }
+.youtube-connect-divider::before, .youtube-connect-divider::after { content: ''; height: 1px; flex: 1; background: hsl(var(--border)); }
+.youtube-connect-setup input { width: 100%; height: 38px; padding: 0 10px; border: 2px solid hsl(var(--border)); border-radius: 0; outline: 0; background: hsl(var(--secondary)); color: hsl(var(--foreground)); text-align: center; font-family: 'Press Start 2P', monospace; font-size: 8px; letter-spacing: 1px; }
+.youtube-connect-setup input:focus { border-color: hsl(var(--primary)); box-shadow: 0 0 0 1px hsl(var(--primary)); }
+.youtube-connect-status { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 2px solid hsl(var(--border)); background: hsl(var(--secondary)); }
+.youtube-connect-status > span { flex: 0 0 auto; width: 10px; height: 10px; background: hsl(var(--muted-foreground)); box-shadow: 0 0 6px hsl(var(--muted-foreground) / 0.65); }
+.youtube-connect-status > span.is-active { background: hsl(var(--accent)); box-shadow: 0 0 8px hsl(var(--accent) / 0.9); }
+.youtube-connect-status div { min-width: 0; }
+.youtube-connect-status strong, .youtube-connect-status small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.youtube-connect-status strong { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--primary)); }
+.youtube-connect-status small { margin-top: 6px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.youtube-connect-code { width: 100% !important; height: 40px !important; display: flex !important; align-items: center; justify-content: space-between; gap: 10px; padding: 0 11px; border: 2px dashed hsl(var(--primary)) !important; background: hsl(var(--secondary)) !important; color: hsl(var(--foreground)) !important; }
+.youtube-connect-code span { font-family: 'Press Start 2P', monospace; font-size: 7px; letter-spacing: 1px; }
+.youtube-connect-device, .youtube-connect-note, .youtube-connect-error { margin: 0; padding: 0 14px 12px; font-size: 10px; line-height: 1.45; color: hsl(var(--muted-foreground)); }
+.youtube-connect-device { padding: 0; }
+.youtube-connect-error { color: hsl(var(--destructive)); }
+.youtube-connect-note { border-top: 1px solid hsl(var(--border)); padding-top: 10px; }
+.youtube-connect-disconnect { width: 100%; padding: 7px; border: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground)); background: transparent; font-family: 'Press Start 2P', monospace; font-size: 5px; }
+.youtube-connect-disconnect:hover { color: hsl(var(--destructive)); border-color: hsl(var(--destructive)); }
 .youtube-music-player-utils span { font-family: 'Press Start 2P', monospace; font-size: 5px; color: hsl(var(--yt-cyan)); }
 .youtube-music-player-utils input { max-width: 92px; }
 .youtube-music-more-menu { min-width: 220px; padding: 6px; border: 3px solid hsl(var(--yt-red, 350 92% 58%)); border-radius: 0; background: hsl(240 30% 7% / 0.98); color: hsl(var(--foreground)); box-shadow: 6px 6px 0 hsl(240 30% 2% / 0.8); }

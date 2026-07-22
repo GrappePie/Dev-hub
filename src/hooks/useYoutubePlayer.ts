@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
 import { getNextShuffleMode } from "@/lib/shuffleMode";
+import useYoutubeConnect from "@/hooks/useYoutubeConnect";
+import type { ConnectPlaybackSnapshot, ConnectSessionState } from "@/lib/youtubeConnect";
 import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
 
 const YOUTUBE_IFRAME_API = "https://www.youtube.com/iframe_api";
@@ -273,8 +275,8 @@ export const useYoutubePlayer = () => {
     const shuffleModeRef = useRef<"off" | "shuffle" | "smart">("off");
     const pendingTrackRef = useRef<YouTubeTrack | null>(null);
     const fetchedLibraryRef = useRef(false);
-    const playTrackRef = useRef<(track: YouTubeTrack) => void>(() => undefined);
     const handleTrackEndRef = useRef<() => void>(() => undefined);
+    const pendingConnectResumeRef = useRef<{ positionMs: number; isPlaying: boolean } | null>(null);
 
     const [apiReady, setApiReady] = useState(false);
     const [playerReady, setPlayerReady] = useState(false);
@@ -909,10 +911,6 @@ export const useYoutubePlayer = () => {
     }, [playQueueIndex, canSearch, youtubeApiGet, mapSearchResults]);
 
     useEffect(() => {
-        playTrackRef.current = playTrack;
-    }, [playTrack]);
-
-    useEffect(() => {
         handleTrackEndRef.current = handleTrackEnd;
     }, [handleTrackEnd]);
 
@@ -937,7 +935,18 @@ export const useYoutubePlayer = () => {
                     if (pendingTrackRef.current) {
                         const pending = pendingTrackRef.current;
                         pendingTrackRef.current = null;
-                        playTrackRef.current(pending);
+                        player.loadVideoById(pending.videoId);
+                        const resume = pendingConnectResumeRef.current;
+                        pendingConnectResumeRef.current = null;
+                        if (resume) {
+                            window.setTimeout(() => {
+                                player.seekTo(resume.positionMs / 1000, true);
+                                if (resume.isPlaying) player.playVideo();
+                                else player.pauseVideo();
+                            }, 250);
+                        } else {
+                            player.playVideo();
+                        }
                     }
                 },
                 onStateChange: (event) => {
@@ -1358,6 +1367,66 @@ export const useYoutubePlayer = () => {
         setStatusText("Modo YouTube cerrado.");
     }, []);
 
+    const pauseForRemoteDevice = useCallback(() => {
+        playerRef.current?.pauseVideo();
+        setIsPlaying(false);
+        setStatusText("Reproducción activa en otro dispositivo.");
+    }, []);
+
+    const applyConnectSession = useCallback((state: ConnectSessionState, resumePositionMs: number) => {
+        const track = state.track as YouTubeTrack | null;
+        if (!track) return;
+
+        const remoteQueue = state.queue as YouTubeTrack[];
+        const trackIndex = remoteQueue.findIndex((item) => item.videoId === track.videoId);
+        const nextQueue = trackIndex >= 0 ? remoteQueue : [track, ...remoteQueue];
+        const nextIndex = trackIndex >= 0 ? trackIndex : 0;
+
+        queueRef.current = nextQueue;
+        queueIndexRef.current = nextIndex;
+        shuffleModeRef.current = state.shuffleMode;
+        repeatModeRef.current = state.repeatMode;
+        setQueueTracks(nextQueue);
+        setQueueIndex(nextIndex);
+        setShuffleMode(state.shuffleMode);
+        setRepeatMode(state.repeatMode);
+        setCurrentTrack(mapCurrentTrack(track));
+        setDurationMs(state.durationMs || track.durationMs);
+        setPositionMs(resumePositionMs);
+        pushRecent(track);
+
+        const player = playerRef.current;
+        if (!playerReady || !player) {
+            pendingTrackRef.current = track;
+            pendingConnectResumeRef.current = { positionMs: resumePositionMs, isPlaying: state.isPlaying };
+            return;
+        }
+
+        player.loadVideoById(track.videoId);
+        window.setTimeout(() => {
+            player.seekTo(resumePositionMs / 1000, true);
+            if (state.isPlaying) player.playVideo();
+            else player.pauseVideo();
+        }, 250);
+    }, [playerReady, pushRecent]);
+
+    const connectSnapshot = useMemo<ConnectPlaybackSnapshot>(() => ({
+        track: currentTrackToYouTubeTrack(currentTrack),
+        queue: queueTracks,
+        queueIndex,
+        positionMs,
+        durationMs,
+        isPlaying,
+        shuffleMode,
+        repeatMode,
+    }), [currentTrack, durationMs, isPlaying, positionMs, queueIndex, queueTracks, repeatMode, shuffleMode]);
+
+    const connect = useYoutubeConnect({
+        snapshot: connectSnapshot,
+        onRemotePause: pauseForRemoteDevice,
+        onTakeover: applyConnectSession,
+    });
+
     const progress = useMemo(() => {
         if (!durationMs) return 0;
         return Math.max(0, Math.min(100, (positionMs / durationMs) * 100));
@@ -1387,6 +1456,7 @@ export const useYoutubePlayer = () => {
         commentsLoading,
         showVideo,
         pipMode,
+        connect,
         toggleVideoMode,
         togglePipMode,
         isAuthenticated: Boolean(accessToken),

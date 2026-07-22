@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type MutableRefObject, type ReactNode } f
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
 import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
 import type { YouTubeComment, YouTubeLibraryItem, YouTubeTrack } from "@/hooks/useYoutubePlayer";
+import type { YouTubeConnectController } from "@/hooks/useYoutubeConnect";
 import useRetroSfx from "@/hooks/useRetroSfx";
 import PixelIcon from "@/components/PixelIcon";
 import Visualizer from "@/components/Visualizer";
@@ -19,6 +20,8 @@ import { ExternalLink } from "pixelarticons/react/ExternalLink";
 import { Radio } from "pixelarticons/react/Radio";
 import { ListBox } from "pixelarticons/react/ListBox";
 import { User } from "pixelarticons/react/User";
+import { CloudServer } from "pixelarticons/react/CloudServer";
+import { Copy } from "pixelarticons/react/Copy";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -29,6 +32,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type YoutubeView = "home" | "library" | "likes" | "playlist";
 
@@ -55,6 +59,7 @@ interface YoutubeMusicScreenProps {
     repeatMode: number;
     currentTime: string;
     totalTime: string;
+    connect: YouTubeConnectController;
     playerHostRef: (node: HTMLDivElement | null) => void;
     pipMode: boolean;
     onTogglePipMode: () => void;
@@ -113,6 +118,7 @@ const YoutubeMusicScreen = ({
     repeatMode,
     currentTime,
     totalTime,
+    connect,
     playerHostRef,
     pipMode,
     onTogglePipMode,
@@ -317,6 +323,7 @@ const YoutubeMusicScreen = ({
                     repeatMode={repeatMode}
                     currentTime={currentTime}
                     totalTime={totalTime}
+                    connect={connect}
                     onPlayPause={onPlayPause}
                     onNext={onNext}
                     onPrev={onPrev}
@@ -556,7 +563,7 @@ const NowPlayingDock = ({ currentTrack, playerHostRef, pipMode, onTogglePipMode,
     </aside>
 );
 
-const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume, currentRating, ratingLoading, shuffleMode, repeatMode, currentTime, totalTime, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onRate, onQueueNext, onQueueLast, onClearQueue, onStartMix, onSaveToPlaylist, onTogglePipMode, onShare }: {
+const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume, currentRating, ratingLoading, shuffleMode, repeatMode, currentTime, totalTime, connect, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onRate, onQueueNext, onQueueLast, onClearQueue, onStartMix, onSaveToPlaylist, onTogglePipMode, onShare }: {
     currentTrack: CurrentTrack | null;
     playlists: Extract<YouTubeLibraryItem, { kind: "playlist" }>[];
     isPlaying: boolean;
@@ -568,6 +575,7 @@ const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume
     repeatMode: number;
     currentTime: string;
     totalTime: string;
+    connect: YouTubeConnectController;
     onPlayPause: () => void;
     onNext: () => void;
     onPrev: () => void;
@@ -608,6 +616,71 @@ const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume
             <div className="youtube-music-timeline"><time>{currentTime}</time><input aria-label="Progreso" type="range" min="0" max="100" value={progress} onChange={(event) => onSeek(Number(event.target.value))} /><time>{totalTime}</time></div>
         </div>
         <div className="youtube-music-player-utils">
+            <Popover>
+                <PopoverTrigger asChild>
+                    <button
+                        className={connect.isConnected ? "is-on youtube-connect-trigger" : "youtube-connect-trigger"}
+                        title="Dev Hub Connect"
+                        aria-label="Abrir Dev Hub Connect"
+                    >
+                        <PixelIcon icon={CloudServer} size="sm" />
+                        {connect.isConnected && <span className={connect.isActiveDevice ? "youtube-connect-dot is-active" : "youtube-connect-dot"} />}
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="end" className="youtube-connect-popover">
+                    <div className="youtube-connect-heading">
+                        <span>DEV HUB CONNECT</span>
+                        <small>{connect.isConnected ? "LINK ONLINE" : "DEVICE HANDOFF"}</small>
+                    </div>
+
+                    {connect.isConnected && connect.session ? (
+                        <div className="youtube-connect-session">
+                            <div className="youtube-connect-status">
+                                <span className={connect.isActiveDevice ? "is-active" : ""} />
+                                <div>
+                                    <strong>{connect.isActiveDevice ? "REPRODUCIENDO AQUÍ" : `ACTIVO EN ${connect.session.activeDeviceName.toUpperCase()}`}</strong>
+                                    <small>{connect.session.track?.title || "Esperando una canción"}</small>
+                                </div>
+                            </div>
+                            <button className="youtube-connect-code" onClick={() => void connect.copyCode()} title="Copiar código">
+                                <span>{connect.formattedCode}</span>
+                                <PixelIcon icon={Copy} size="sm" />
+                            </button>
+                            {!connect.isActiveDevice && (
+                                <button className="retro-btn-primary youtube-connect-action" disabled={connect.busy} onClick={() => void connect.takeOver()}>
+                                    {connect.busy ? "TRANSFIRIENDO..." : "REPRODUCIR AQUÍ"}
+                                </button>
+                            )}
+                            <p className="youtube-connect-device">Este dispositivo: {connect.deviceName}</p>
+                            <button className="youtube-connect-disconnect" onClick={connect.disconnect}>DESCONECTAR ESTE DISPOSITIVO</button>
+                        </div>
+                    ) : (
+                        <div className="youtube-connect-setup">
+                            <p>Crea una sesión o escribe el código que aparece en tu otro dispositivo.</p>
+                            <button className="retro-btn-primary youtube-connect-action" disabled={connect.busy} onClick={() => void connect.createSession()}>
+                                {connect.busy ? "CREANDO..." : "CREAR SESIÓN"}
+                            </button>
+                            <div className="youtube-connect-divider"><span>O</span></div>
+                            <input
+                                aria-label="Código de Dev Hub Connect"
+                                autoComplete="off"
+                                maxLength={19}
+                                placeholder="XXXX-XXXX-XXXX-XXXX"
+                                value={connect.joinCode}
+                                onChange={(event) => connect.setJoinCode(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") void connect.joinSession();
+                                }}
+                            />
+                            <button className="retro-btn-secondary youtube-connect-action" disabled={connect.busy || connect.joinCode.length < 19} onClick={() => void connect.joinSession()}>
+                                UNIRME
+                            </button>
+                        </div>
+                    )}
+                    {connect.error && <p className="youtube-connect-error">{connect.error}</p>}
+                    <p className="youtube-connect-note">Sincroniza Dev Hub con Dev Hub. No comparte tu token de YouTube.</p>
+                </PopoverContent>
+            </Popover>
             <button
                 className={currentRating === "like" ? "is-on" : ""}
                 disabled={!currentTrack || ratingLoading}

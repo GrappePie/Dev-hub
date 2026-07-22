@@ -929,6 +929,7 @@ const Index = () => {
                             repeatMode={youtube.repeatMode}
                             currentTime={youtube.currentTime}
                             totalTime={youtube.totalTime}
+                            connect={youtube.connect}
                             playerHostRef={youtube.playerHostRef}
                             pipMode={youtube.pipMode}
                             onTogglePipMode={youtube.togglePipMode}
