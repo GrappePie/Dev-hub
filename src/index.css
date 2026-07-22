@@ -351,3 +351,278 @@ input[type=range]:hover::-webkit-slider-thumb {
   display: block;
   border: none;
 }
+
+/* YouTube music-mode layout: streaming hierarchy translated into Dev Hub pixel UI. */
+.youtube-music-shell {
+  --yt-red: 350 92% 58%;
+  --yt-cyan: 181 82% 55%;
+  display: grid;
+  grid-template-columns: 215px minmax(0, 1fr);
+  min-height: min(790px, calc(100vh - 135px));
+  background:
+    linear-gradient(135deg, hsl(var(--yt-red) / 0.08), transparent 34%),
+    linear-gradient(315deg, hsl(var(--yt-cyan) / 0.06), transparent 30%),
+    hsl(240 30% 6% / 0.93);
+  position: relative;
+  isolation: isolate;
+}
+
+.youtube-music-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(hsl(var(--primary) / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.025) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.youtube-music-sidebar {
+  padding: 20px 14px;
+  border-right: 4px solid hsl(var(--border));
+  background: hsl(240 32% 5% / 0.94);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.youtube-music-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px dashed hsl(var(--border) / 0.55);
+  padding: 2px 2px 16px;
+}
+
+.youtube-music-brand-orb {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--yt-red));
+  color: white;
+  border: 3px solid hsl(var(--primary));
+  box-shadow: 3px 3px 0 hsl(240 30% 2%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+}
+
+.youtube-music-brand p,
+.youtube-music-section-heading h2,
+.youtube-music-hero h1,
+.youtube-music-playlist-hero h1 {
+  font-family: 'Press Start 2P', monospace;
+}
+
+.youtube-music-brand p { font-size: 8px; color: hsl(var(--primary)); line-height: 1.5; }
+.youtube-music-brand span:not(.youtube-music-brand-orb) { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--muted-foreground)); }
+
+.youtube-music-nav { display: grid; gap: 7px; }
+.youtube-music-nav button {
+  text-align: left;
+  padding: 11px 10px;
+  border: 2px solid transparent;
+  color: hsl(var(--muted-foreground));
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  transition: 80ms steps(2, end);
+}
+.youtube-music-nav button span { color: hsl(var(--yt-cyan)); margin-right: 7px; }
+.youtube-music-nav button:hover,
+.youtube-music-nav button.is-active {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--primary));
+  background: linear-gradient(90deg, hsl(var(--yt-red) / 0.22), hsl(var(--secondary) / 0.75));
+  box-shadow: inset 3px 0 0 hsl(var(--yt-red));
+}
+
+.youtube-music-side-library { min-height: 0; display: grid; align-content: start; gap: 5px; }
+.youtube-music-side-heading { display: flex; justify-content: space-between; color: hsl(var(--primary)); font-family: 'Press Start 2P', monospace; font-size: 6px; padding: 0 5px 8px; }
+.youtube-music-side-library button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 5px;
+  font-size: 15px;
+  color: hsl(var(--secondary-foreground));
+  text-align: left;
+  border-bottom: 1px solid hsl(var(--border) / 0.18);
+}
+.youtube-music-side-library button:hover { color: hsl(var(--primary)); background: hsl(var(--secondary) / 0.7); }
+.youtube-music-side-library > p { padding: 8px 5px; font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--muted-foreground)); }
+.youtube-music-slot { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--yt-red)); }
+
+.youtube-music-profile {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 2px solid hsl(var(--border));
+  background: hsl(var(--secondary) / 0.7);
+  padding: 8px;
+}
+.youtube-music-profile > span { width: 32px; height: 32px; display: grid; place-items: center; background: hsl(var(--yt-red)); border: 2px solid hsl(var(--primary)); font-family: 'Press Start 2P', monospace; font-size: 7px; }
+.youtube-music-profile p { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--foreground)); }
+.youtube-music-profile small { color: hsl(var(--accent)); font-family: 'Press Start 2P', monospace; font-size: 5px; }
+
+.youtube-music-stage { min-width: 0; display: flex; flex-direction: column; }
+.youtube-music-stage-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; padding: 22px; flex: 1; min-height: 0; }
+.youtube-music-content { min-width: 0; }
+
+.youtube-music-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.youtube-music-section-heading > div > span,
+.youtube-music-kicker { font-family: 'Press Start 2P', monospace; color: hsl(var(--yt-cyan)); font-size: 6px; letter-spacing: 1px; }
+.youtube-music-section-heading h2 { margin-top: 5px; font-size: clamp(12px, 2vw, 18px); color: hsl(var(--foreground)); text-shadow: 3px 3px 0 hsl(var(--yt-red) / 0.45); }
+.youtube-music-section-heading > button,
+.youtube-music-section-heading > div + button { color: hsl(var(--primary)); font-family: 'Press Start 2P', monospace; font-size: 6px; }
+
+.youtube-music-hero {
+  min-height: 238px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 20px;
+  align-items: center;
+  padding: 26px;
+  border: 4px solid hsl(var(--primary));
+  background:
+    linear-gradient(110deg, hsl(var(--yt-red) / 0.28), hsl(var(--card) / 0.72) 52%, hsl(var(--yt-cyan) / 0.12)),
+    hsl(var(--card));
+  box-shadow: inset 4px 4px 0 hsl(var(--primary) / 0.16), 7px 7px 0 hsl(240 30% 2% / 0.8);
+  overflow: hidden;
+}
+.youtube-music-hero h1 { font-size: clamp(17px, 3vw, 29px); line-height: 1.55; margin: 12px 0; text-shadow: 4px 4px 0 hsl(var(--yt-red) / 0.6); }
+.youtube-music-hero p { color: hsl(var(--secondary-foreground)); margin-bottom: 18px; max-width: 590px; }
+.youtube-music-hero-art { position: relative; justify-self: end; }
+.youtube-music-hero-art img { width: 200px; height: 200px; object-fit: cover; border: 4px solid hsl(var(--border)); box-shadow: 8px 8px 0 hsl(var(--yt-red) / 0.45); }
+.youtube-music-hero-art span { position: absolute; right: -5px; top: -9px; padding: 6px 8px; background: hsl(var(--yt-cyan)); color: hsl(240 30% 5%); border: 2px solid hsl(var(--foreground)); font-family: 'Press Start 2P', monospace; font-size: 6px; }
+
+.youtube-music-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.youtube-music-card { min-width: 0; text-align: left; padding: 10px; border: 3px solid hsl(var(--border) / 0.65); background: hsl(var(--card) / 0.65); box-shadow: 4px 4px 0 hsl(240 30% 2% / 0.8); }
+.youtube-music-card:hover { border-color: hsl(var(--yt-cyan)); transform: translate(-1px, -1px); }
+.youtube-music-card-art { aspect-ratio: 16 / 10; position: relative; margin-bottom: 10px; overflow: hidden; background: hsl(var(--secondary)); }
+.youtube-music-card-art img { width: 100%; height: 100%; object-fit: cover; }
+.youtube-music-card-art span { position: absolute; left: 5px; bottom: 5px; background: hsl(240 30% 4% / 0.9); border: 2px solid hsl(var(--primary)); padding: 4px; font-family: 'Press Start 2P', monospace; font-size: 6px; }
+.youtube-music-card strong,
+.youtube-music-library-card strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: hsl(var(--foreground)); }
+.youtube-music-card small,
+.youtube-music-library-card small { display: block; color: hsl(var(--muted-foreground)); line-height: 1.2; margin-top: 2px; }
+
+.youtube-music-wide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.youtube-music-wide-grid button { display: grid; grid-template-columns: 58px minmax(0, 1fr) 28px; align-items: center; gap: 10px; text-align: left; padding: 7px; background: hsl(var(--card) / 0.62); border: 2px solid hsl(var(--border) / 0.55); }
+.youtube-music-wide-grid button:hover { border-color: hsl(var(--yt-red)); }
+.youtube-music-wide-grid img { width: 58px; height: 58px; object-fit: cover; }
+.youtube-music-wide-grid strong, .youtube-music-wide-grid small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.youtube-music-wide-grid small { color: hsl(var(--muted-foreground)); }
+.youtube-music-wide-grid b { color: hsl(var(--primary)); font-family: 'Press Start 2P', monospace; }
+
+.youtube-music-library-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.youtube-music-library-card { min-width: 0; text-align: left; padding: 10px; border: 3px solid hsl(var(--border) / 0.55); background: hsl(var(--card) / 0.58); }
+.youtube-music-library-card:hover { border-color: hsl(var(--primary)); background: hsl(var(--secondary)); }
+.youtube-music-library-card > div { aspect-ratio: 1; position: relative; overflow: hidden; margin-bottom: 9px; }
+.youtube-music-library-card img { width: 100%; height: 100%; object-fit: cover; }
+.youtube-music-library-card div span { position: absolute; left: 5px; bottom: 5px; background: hsl(240 30% 4% / 0.9); border: 2px solid hsl(var(--yt-red)); padding: 4px; font-family: 'Press Start 2P', monospace; font-size: 5px; }
+
+.youtube-music-search-grid { display: grid; gap: 8px; }
+.youtube-music-search-grid article { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px; border: 2px solid hsl(var(--border) / 0.45); background: hsl(var(--card) / 0.55); }
+.youtube-music-search-art { width: 86px; height: 54px; position: relative; overflow: hidden; border: 2px solid hsl(var(--border)); }
+.youtube-music-search-art img { width: 100%; height: 100%; object-fit: cover; }
+.youtube-music-search-art span { position: absolute; inset: 0; display: grid; place-items: center; color: white; text-shadow: 2px 2px 0 black; }
+.youtube-music-search-grid strong, .youtube-music-search-grid small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.youtube-music-search-grid small { color: hsl(var(--muted-foreground)); }
+
+.youtube-music-playlist-hero { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: center; gap: 24px; padding: 20px; margin-bottom: 22px; background: linear-gradient(115deg, hsl(var(--yt-red) / 0.24), hsl(var(--card) / 0.68)); border: 4px solid hsl(var(--border)); }
+.youtube-music-playlist-art { position: relative; }
+.youtube-music-playlist-art img { width: 210px; height: 210px; object-fit: cover; border: 4px solid hsl(var(--primary)); box-shadow: 7px 7px 0 hsl(var(--yt-red) / 0.45); }
+.youtube-music-playlist-art span { position: absolute; left: 7px; bottom: 7px; background: hsl(240 30% 4% / 0.9); border: 2px solid hsl(var(--yt-cyan)); color: hsl(var(--yt-cyan)); padding: 5px; font-family: 'Press Start 2P', monospace; font-size: 6px; }
+.youtube-music-playlist-hero h1 { margin: 10px 0; font-size: clamp(17px, 2.7vw, 27px); line-height: 1.5; }
+.youtube-music-playlist-hero p { color: hsl(var(--muted-foreground)); margin-bottom: 18px; }
+
+.youtube-music-track-list { display: grid; gap: 4px; }
+.youtube-music-track-list button { display: grid; grid-template-columns: 34px 46px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 7px; border: 2px solid transparent; border-bottom-color: hsl(var(--border) / 0.25); }
+.youtube-music-track-list-large button { grid-template-columns: 34px 46px minmax(0, 1fr) auto 48px; }
+.youtube-music-track-list button:hover { border-color: hsl(var(--yt-cyan)); background: linear-gradient(90deg, hsl(var(--yt-red) / 0.13), hsl(var(--secondary) / 0.65)); }
+.youtube-music-track-list img { width: 46px; height: 46px; object-fit: cover; border: 2px solid hsl(var(--border)); }
+.youtube-music-track-list strong, .youtube-music-track-list small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.youtube-music-track-list small { color: hsl(var(--muted-foreground)); }
+.youtube-music-track-index, .youtube-music-row-action { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--yt-red)); }
+.youtube-music-row-action { color: hsl(var(--yt-cyan)); }
+.youtube-music-track-list time { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--muted-foreground)); }
+.youtube-music-empty { padding: 30px; border: 3px dashed hsl(var(--border) / 0.55); text-align: center; color: hsl(var(--muted-foreground)); font-family: 'Press Start 2P', monospace; font-size: 7px; }
+
+.youtube-music-now-playing { align-self: start; position: sticky; top: 18px; padding: 12px; border: 3px solid hsl(var(--border)); background: hsl(var(--card) / 0.74); box-shadow: 5px 5px 0 hsl(240 30% 2%); min-width: 0; }
+.youtube-music-dock-heading { display: flex; justify-content: space-between; margin-bottom: 9px; font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--primary)); }
+.youtube-music-dock-heading i { color: hsl(var(--accent)); font-style: normal; animation: retro-blink 1.2s step-end infinite; }
+.youtube-music-video { width: 224px; height: 224px; max-width: 100%; margin: auto; background: black; border: 4px solid hsl(var(--yt-red)); box-shadow: 5px 5px 0 hsl(240 30% 2%); overflow: hidden; }
+.youtube-music-video-pip { position: fixed; right: 22px; bottom: 120px; width: 356px; height: 200px; max-width: calc(100vw - 32px); z-index: 10000; border-color: hsl(var(--primary)); }
+.youtube-music-pip-button { margin: 9px auto 0; display: flex; align-items: center; gap: 6px; color: hsl(var(--yt-cyan)); font-family: 'Press Start 2P', monospace; font-size: 6px; }
+.youtube-music-dock-track { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: center; margin-top: 11px; padding: 8px; background: hsl(var(--secondary) / 0.7); border: 2px solid hsl(var(--border) / 0.55); }
+.youtube-music-dock-track img { width: 42px; height: 42px; object-fit: cover; }
+.youtube-music-dock-track strong, .youtube-music-dock-track small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.youtube-music-dock-track small { color: hsl(var(--muted-foreground)); }
+.youtube-music-now-playing .pixel-box { margin-top: 10px; border-width: 2px; box-shadow: 3px 3px 0 hsl(240 30% 2%); }
+.youtube-music-comments { margin-top: 10px; padding-top: 9px; border-top: 2px dashed hsl(var(--border) / 0.45); }
+.youtube-music-comments > span { font-family: 'Press Start 2P', monospace; font-size: 6px; color: hsl(var(--primary)); }
+.youtube-music-comments p { margin-top: 6px; font-size: 13px; line-height: 1.1; color: hsl(var(--muted-foreground)); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.youtube-music-comments b { color: hsl(var(--yt-cyan)); }
+
+.youtube-music-playerbar { position: sticky; bottom: 0; z-index: 40; min-height: 94px; display: grid; grid-template-columns: minmax(180px, 0.9fr) minmax(300px, 1.5fr) minmax(170px, 0.7fr); align-items: center; gap: 18px; padding: 10px 16px; background: hsl(240 30% 5% / 0.96); border-top: 4px solid hsl(var(--primary)); box-shadow: 0 -7px 0 hsl(240 30% 2% / 0.6); backdrop-filter: blur(14px); }
+.youtube-music-player-track { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: center; gap: 9px; min-width: 0; }
+.youtube-music-player-track img { width: 54px; height: 54px; object-fit: cover; border: 3px solid hsl(var(--border)); }
+.youtube-music-player-track strong, .youtube-music-player-track small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.youtube-music-player-track small { color: hsl(var(--muted-foreground)); }
+.youtube-music-player-center { min-width: 0; display: grid; gap: 6px; }
+.youtube-music-player-buttons { display: flex; justify-content: center; align-items: center; gap: 7px; }
+.youtube-music-player-buttons button, .youtube-music-player-utils button { width: 32px; height: 28px; display: grid; place-items: center; border: 2px solid hsl(var(--border) / 0.65); color: hsl(var(--muted-foreground)); background: hsl(var(--secondary)); }
+.youtube-music-player-buttons button:hover, .youtube-music-player-utils button:hover, .youtube-music-player-buttons button.is-on { color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
+.youtube-music-player-buttons button.is-primary { width: 44px; height: 34px; background: hsl(var(--yt-red)); color: white; border-color: hsl(var(--primary)); box-shadow: 3px 3px 0 hsl(240 30% 2%); }
+.youtube-music-pause { font-family: 'Press Start 2P', monospace; font-size: 10px; }
+.youtube-music-timeline { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 8px; align-items: center; }
+.youtube-music-timeline time { font-family: 'Press Start 2P', monospace; font-size: 5px; color: hsl(var(--muted-foreground)); }
+.youtube-music-player-utils { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.youtube-music-player-utils span { font-family: 'Press Start 2P', monospace; font-size: 5px; color: hsl(var(--yt-cyan)); }
+.youtube-music-player-utils input { max-width: 92px; }
+
+@media (max-width: 1180px) {
+  .youtube-music-stage-grid { grid-template-columns: minmax(0, 1fr); }
+  .youtube-music-now-playing { position: relative; top: auto; display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 12px; }
+  .youtube-music-dock-heading { grid-column: 1 / -1; }
+  .youtube-music-pip-button { align-self: start; margin: 0; }
+  .youtube-music-dock-track, .youtube-music-comments, .youtube-music-now-playing .pixel-box { grid-column: 2; }
+  .youtube-music-video { grid-row: 2 / span 4; grid-column: 1; }
+  .youtube-music-library-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .youtube-music-shell { grid-template-columns: 1fr; }
+  .youtube-music-sidebar { border-right: 0; border-bottom: 4px solid hsl(var(--border)); padding: 12px; gap: 10px; }
+  .youtube-music-brand { border: 0; padding: 0; }
+  .youtube-music-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .youtube-music-nav button { text-align: center; }
+  .youtube-music-side-library, .youtube-music-profile { display: none; }
+  .youtube-music-playerbar { grid-template-columns: 1fr; gap: 8px; }
+  .youtube-music-player-track { display: none; }
+  .youtube-music-player-utils { justify-content: center; }
+  .youtube-music-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .youtube-music-stage-grid { padding: 14px; }
+  .youtube-music-hero { grid-template-columns: 1fr; padding: 18px; }
+  .youtube-music-hero-art { justify-self: start; }
+  .youtube-music-hero-art img { width: 160px; height: 160px; }
+  .youtube-music-card-grid, .youtube-music-library-grid, .youtube-music-wide-grid { grid-template-columns: 1fr; }
+  .youtube-music-playlist-hero { grid-template-columns: 1fr; }
+  .youtube-music-playlist-art img { width: 170px; height: 170px; }
+  .youtube-music-now-playing { display: block; }
+  .youtube-music-video { margin: 10px auto; }
+  .youtube-music-dock-track, .youtube-music-comments, .youtube-music-now-playing .pixel-box { margin-top: 10px; }
+  .youtube-music-search-grid article { grid-template-columns: 72px minmax(0, 1fr); }
+  .youtube-music-search-grid article > .retro-btn-secondary { grid-column: 2; justify-self: start; }
+  .youtube-music-search-art { width: 72px; }
+  .youtube-music-track-list-large button { grid-template-columns: 28px 42px minmax(0, 1fr) 42px; }
+  .youtube-music-track-list-large .youtube-music-row-action { display: none; }
+  .youtube-music-track-list time { font-size: 5px; }
+}

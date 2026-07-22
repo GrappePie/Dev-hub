@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
 import PlayerScreen from "@/components/PlayerScreen";
 import SoundcloudScreen from "@/components/SoundcloudScreen";
+import YoutubeMusicScreen from "@/components/YoutubeMusicScreen";
 import FileaScreen from "@/components/FileaScreen";
 import PixelTransition from "@/components/PixelTransition";
 import ReactiveBackground, { type ReactiveBackgroundVariant } from "@/components/ReactiveBackground";
@@ -429,7 +430,8 @@ const Index = () => {
     const youtubeLoadingMore = youtube.libraryLoadingMoreBySection[youtubeLibrarySection];
     const showSpotifySearchPanel = isLoggedIn && searchQuery.trim().length > 0 && (spotify.searchLoading || hasSearchResults);
     const showSoundcloudSearchPanel = isSoundcloudMode && searchQuery.trim().length > 0 && (soundcloud.searchLoading || hasSoundcloudSearchResults);
-    const showYoutubeSearchPanel = isYouTubeMode && searchQuery.trim().length > 0 && (youtube.searchLoading || hasYoutubeSearchResults);
+    const showYoutubeSearchPanel = false;
+    const showLegacyYoutubeLibrary = false;
     const showYoutubeAuthControl = isYouTubeMode;
     const youtubeAuthLabel = youtube.isAuthLoading
         ? "Conectando..."
@@ -461,14 +463,14 @@ const Index = () => {
                 onComplete={handleTransitionComplete}
                 onTransitionEnd={() => setTransitioning(false)}
             />
-            <div className="max-w-screen-xl mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 relative z-10">
+            <div className={`${isYouTubeMode ? "max-w-[2200px]" : "max-w-screen-xl"} mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 relative z-10`}>
                 <div className="pixel-box-elevated overflow-hidden">
                     {!showOAuthBridge && (
                         <Header
                             isSessionActive={isSessionActive}
                             showSearchControls={isLoggedIn || isSoundcloudMode || isYouTubeMode}
                             showDeviceControl={isLoggedIn}
-                            showLibraryControl={(isLoggedIn || (isYouTubeMode && youtube.isAuthenticated))}
+                            showLibraryControl={isLoggedIn}
                             showAuthControl={showYoutubeAuthControl}
                             authControlLabel={youtubeAuthLabel}
                             authControlTitle={youtube.accountName || "YouTube"}
@@ -620,7 +622,7 @@ const Index = () => {
                         </div>
                     )}
 
-                    {isYouTubeMode && libraryOpen && (
+                    {showLegacyYoutubeLibrary && isYouTubeMode && libraryOpen && (
                         <div className="px-4 pt-4">
                             <div className="pixel-box p-3">
                                 <div className="flex items-center justify-between mb-3">
@@ -904,37 +906,48 @@ const Index = () => {
                             beatSignal={beatRef}
                         />
                     ) : isYouTubeMode ? (
-                        <PlayerScreen
+                        <YoutubeMusicScreen
+                            accountName={youtube.accountName}
+                            isAuthenticated={youtube.isAuthenticated}
+                            libraryLoading={youtube.libraryLoading}
+                            playlists={youtube.libraryBySection.playlists}
+                            likes={youtube.libraryBySection.likes}
+                            searchQuery={searchQuery}
+                            searchResults={youtube.searchResults}
+                            searchLoading={youtube.searchLoading}
                             currentTrack={youtube.currentTrack}
                             queueTracks={youtube.queue}
+                            recentTracks={youtube.recentQueue}
+                            comments={youtube.comments}
+                            commentsLoading={youtube.commentsLoading}
                             isPlaying={youtube.isPlaying}
                             progress={youtube.progress}
                             volume={youtube.volume}
                             shuffleMode={youtube.shuffleMode}
                             repeatMode={youtube.repeatMode}
-                            isLiked={false}
                             currentTime={youtube.currentTime}
                             totalTime={youtube.totalTime}
+                            playerHostRef={youtube.playerHostRef}
+                            pipMode={youtube.pipMode}
+                            onTogglePipMode={youtube.togglePipMode}
                             onPlayPause={youtube.togglePlayPause}
                             onNext={youtube.nextTrack}
                             onPrev={youtube.prevTrack}
                             onShuffleCycle={youtube.cycleShuffle}
                             onRepeatToggle={youtube.cycleRepeat}
-                            onProgressChange={youtube.seekToProgress}
-                            onVolumeChange={youtube.setVolumeLevel}
-                            onLikeToggle={() => {}}
+                            onSeek={youtube.seekToProgress}
+                            onVolume={youtube.setVolumeLevel}
                             onShare={() => void youtube.shareCurrent()}
-                            onQueueRefresh={youtube.refreshQueue}
-                            onQueueTrackSelect={youtube.playQueueTrack}
-                            comments={youtube.comments}
-                            commentsLoading={youtube.commentsLoading}
+                            onPlayLibraryItem={(item) => void youtube.playLibraryItem(item)}
+                            onPlaySearchTrack={youtube.playSearchTrack}
+                            onAddToQueue={youtube.addToQueue}
+                            onPlayQueueTrack={youtube.playQueueTrack}
+                            onRefreshLibrary={() => void youtube.fetchLibrary()}
+                            onLoadMorePlaylists={() => void youtube.loadMoreLibrarySection("playlists")}
+                            playlistsHaveMore={Boolean(youtube.libraryNextBySection.playlists)}
+                            playlistsLoadingMore={youtube.libraryLoadingMoreBySection.playlists}
                             analyser={analyser}
                             onRequestCapture={requestYouTubeCapture}
-                            playerHostRef={youtube.playerHostRef}
-                            showVideo={youtube.showVideo}
-                            pipMode={youtube.pipMode}
-                            onToggleVideoMode={youtube.toggleVideoMode}
-                            onTogglePipMode={youtube.togglePipMode}
                             bpm={bpm}
                             bpmConfidence={bpmConfidence}
                             beatSignal={beatRef}

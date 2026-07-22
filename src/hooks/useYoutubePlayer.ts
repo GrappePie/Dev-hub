@@ -10,7 +10,6 @@ const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
-const DEFAULT_VIDEO_ID = "dQw4w9WgXcQ";
 const VOLUME_STORAGE_KEY = "mh_yt_vol";
 
 const STORAGE = {
@@ -100,7 +99,7 @@ export interface YouTubeComment {
     publishedAt: string;
 }
 
-interface YouTubeTrack {
+export interface YouTubeTrack {
     id: string;
     videoId: string;
     uri: string;
@@ -243,7 +242,6 @@ export const useYoutubePlayer = () => {
     const playerHostRef = useCallback((node: HTMLDivElement | null) => {
         setPlayerHostEl(node);
         if (!node) setPlayerReady(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     const playerRef = useRef<YouTubePlayer | null>(null);
     const tokenClientRef = useRef<GoogleTokenClient | null>(null);
@@ -889,7 +887,6 @@ export const useYoutubePlayer = () => {
         const player = new window.YT.Player(playerHostEl, {
             width: "200",
             height: "200",
-            videoId: DEFAULT_VIDEO_ID,
             playerVars: {
                 autoplay: 0,
                 controls: 0,
@@ -1152,7 +1149,11 @@ export const useYoutubePlayer = () => {
     }, []);
 
     const shareCurrent = useCallback(async () => {
-        const target = currentTrack?.externalUrl || toWatchUrl(DEFAULT_VIDEO_ID);
+        const target = currentTrack?.externalUrl;
+        if (!target) {
+            toast({ title: "Sin track", description: "Selecciona una canción antes de compartir." });
+            return;
+        }
         await navigator.clipboard.writeText(target);
         toast({ title: "Enlace copiado", description: "YouTube URL copiada al portapapeles." });
     }, [currentTrack?.externalUrl]);
