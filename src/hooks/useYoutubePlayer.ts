@@ -1521,7 +1521,7 @@ export const useYoutubePlayer = () => {
             return;
         }
         const next = Math.max(0, Math.min(100, value));
-        optimisticSeekRef.current = { value: next, until: Date.now() + 5_000 };
+        optimisticSeekRef.current = { value: next, until: Date.now() + 8_000 };
         setPositionMs(Math.round((next / 100) * durationMs));
         if (remoteSeekTimerRef.current !== null) window.clearTimeout(remoteSeekTimerRef.current);
         remoteSeekTimerRef.current = window.setTimeout(() => {
@@ -1535,7 +1535,7 @@ export const useYoutubePlayer = () => {
             return;
         }
         const next = Math.max(0, Math.min(1, value));
-        optimisticVolumeRef.current = { value: next, until: Date.now() + 5_000 };
+        optimisticVolumeRef.current = { value: next, until: Date.now() + 8_000 };
         volumeRef.current = next;
         setVolume(next);
         if (remoteVolumeTimerRef.current !== null) window.clearTimeout(remoteVolumeTimerRef.current);
