@@ -55,6 +55,7 @@ interface YouTubePlaylistItem {
     snippet?: {
         title?: string;
         channelTitle?: string;
+        videoOwnerChannelTitle?: string;
         thumbnails?: {
             high?: { url?: string };
             medium?: { url?: string };
@@ -524,7 +525,7 @@ export const useYoutubePlayer = () => {
                         videoId,
                         uri: toWatchUrl(videoId),
                         title: item.snippet?.title || "YouTube Track",
-                        artist: item.snippet?.channelTitle || "YouTube",
+                        artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
                         image: pickThumb(item.snippet?.thumbnails),
                         durationMs: duration,
                         duration: formatMs(duration),
@@ -629,7 +630,7 @@ export const useYoutubePlayer = () => {
                             videoId,
                             uri: toWatchUrl(videoId),
                             title: item.snippet?.title || "Like",
-                            artist: item.snippet?.channelTitle || "YouTube",
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
                             image: pickThumb(item.snippet?.thumbnails),
                             durationMs: duration,
                             duration: formatMs(duration),
@@ -657,7 +658,7 @@ export const useYoutubePlayer = () => {
                             videoId,
                             uri: toWatchUrl(videoId),
                             title: item.snippet?.title || "Watch Later",
-                            artist: item.snippet?.channelTitle || "YouTube",
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
                             image: pickThumb(item.snippet?.thumbnails),
                             durationMs: duration,
                             duration: formatMs(duration),
@@ -731,7 +732,7 @@ export const useYoutubePlayer = () => {
                             videoId,
                             uri: toWatchUrl(videoId),
                             title: item.snippet?.title || (section === "likes" ? "Like" : "Watch Later"),
-                            artist: item.snippet?.channelTitle || "YouTube",
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
                             image: pickThumb(item.snippet?.thumbnails),
                             durationMs: duration,
                             duration: formatMs(duration),
