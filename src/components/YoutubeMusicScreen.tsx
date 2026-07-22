@@ -16,12 +16,18 @@ import { ThumbsUp } from "pixelarticons/react/ThumbsUp";
 import { ThumbsDown } from "pixelarticons/react/ThumbsDown";
 import { MoreVertical } from "pixelarticons/react/MoreVertical";
 import { ExternalLink } from "pixelarticons/react/ExternalLink";
+import { Radio } from "pixelarticons/react/Radio";
+import { ListBox } from "pixelarticons/react/ListBox";
+import { User } from "pixelarticons/react/User";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 
 type YoutubeView = "home" | "library" | "likes" | "playlist";
@@ -60,6 +66,11 @@ interface YoutubeMusicScreenProps {
     onSeek: (value: number) => void;
     onVolume: (value: number) => void;
     onRate: (rating: "like" | "dislike") => void;
+    onQueueNext: () => void;
+    onQueueLast: () => void;
+    onClearQueue: () => void;
+    onStartMix: () => void;
+    onSaveToPlaylist: (playlistId: string, playlistTitle: string) => void;
     onShare: () => void;
     onPlayLibraryItem: (item: YouTubeLibraryItem) => void | Promise<void>;
     onPlaySearchTrack: (track: YouTubeTrack) => void;
@@ -113,6 +124,11 @@ const YoutubeMusicScreen = ({
     onSeek,
     onVolume,
     onRate,
+    onQueueNext,
+    onQueueLast,
+    onClearQueue,
+    onStartMix,
+    onSaveToPlaylist,
     onShare,
     onPlayLibraryItem,
     onPlaySearchTrack,
@@ -291,6 +307,7 @@ const YoutubeMusicScreen = ({
 
                 <CompactPlayerBar
                     currentTrack={currentTrack}
+                    playlists={playlistItems}
                     isPlaying={isPlaying}
                     progress={progress}
                     volume={volume}
@@ -308,6 +325,12 @@ const YoutubeMusicScreen = ({
                     onSeek={onSeek}
                     onVolume={onVolume}
                     onRate={onRate}
+                    onQueueNext={onQueueNext}
+                    onQueueLast={onQueueLast}
+                    onClearQueue={onClearQueue}
+                    onStartMix={onStartMix}
+                    onSaveToPlaylist={onSaveToPlaylist}
+                    onTogglePipMode={onTogglePipMode}
                     onShare={onShare}
                 />
             </section>
@@ -533,8 +556,9 @@ const NowPlayingDock = ({ currentTrack, playerHostRef, pipMode, onTogglePipMode,
     </aside>
 );
 
-const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, currentRating, ratingLoading, shuffleMode, repeatMode, currentTime, totalTime, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onRate, onShare }: {
+const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume, currentRating, ratingLoading, shuffleMode, repeatMode, currentTime, totalTime, onPlayPause, onNext, onPrev, onShuffleCycle, onRepeatToggle, onSeek, onVolume, onRate, onQueueNext, onQueueLast, onClearQueue, onStartMix, onSaveToPlaylist, onTogglePipMode, onShare }: {
     currentTrack: CurrentTrack | null;
+    playlists: Extract<YouTubeLibraryItem, { kind: "playlist" }>[];
     isPlaying: boolean;
     progress: number;
     volume: number;
@@ -552,6 +576,12 @@ const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, currentRa
     onSeek: (value: number) => void;
     onVolume: (value: number) => void;
     onRate: (rating: "like" | "dislike") => void;
+    onQueueNext: () => void;
+    onQueueLast: () => void;
+    onClearQueue: () => void;
+    onStartMix: () => void;
+    onSaveToPlaylist: (playlistId: string, playlistTitle: string) => void;
+    onTogglePipMode: () => void;
     onShare: () => void;
 }) => (
     <footer className="youtube-music-playerbar">
@@ -591,6 +621,28 @@ const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, currentRa
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="end" className="youtube-music-more-menu">
+                    <DropdownMenuItem onSelect={onStartMix}>
+                        <PixelIcon icon={Radio} size="sm" /> COMENZAR MIX
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={onQueueNext}>
+                        <PixelIcon icon={ArrowRightBox} size="sm" /> REPRODUCIR A CONTINUACIÓN
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={onQueueLast}>
+                        <PixelIcon icon={ListBox} size="sm" /> AGREGAR A LA FILA
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="youtube-music-more-subtrigger">
+                            <PixelIcon icon={ListBox} size="sm" /> GUARDAR EN PLAYLIST
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="youtube-music-more-menu">
+                            {playlists.length ? playlists.map((playlist) => (
+                                <DropdownMenuItem key={playlist.playlistId} onSelect={() => onSaveToPlaylist(playlist.playlistId, playlist.title)}>
+                                    {playlist.title}
+                                </DropdownMenuItem>
+                            )) : <DropdownMenuItem disabled>SIN PLAYLISTS</DropdownMenuItem>}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => onRate("like")}>
                         <PixelIcon icon={ThumbsUp} size="sm" />
                         {currentRating === "like" ? "QUITAR ME GUSTA" : "ME GUSTA"}
@@ -603,8 +655,18 @@ const CompactPlayerBar = ({ currentTrack, isPlaying, progress, volume, currentRa
                     <DropdownMenuItem onSelect={onShare}>
                         <PixelIcon icon={Link} size="sm" /> COMPARTIR
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={onTogglePipMode}>
+                        <PixelIcon icon={PictureInPicture} size="sm" /> VENTANA FLOTANTE
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => currentTrack && window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(currentTrack.artist)}`, "_blank", "noopener,noreferrer")}>
+                        <PixelIcon icon={User} size="sm" /> BUSCAR ARTISTA
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => currentTrack?.externalUrl && window.open(currentTrack.externalUrl, "_blank", "noopener,noreferrer")}>
                         <PixelIcon icon={ExternalLink} size="sm" /> ABRIR EN YOUTUBE
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={onClearQueue} className="youtube-music-menu-danger">
+                        DESCARTAR FILA
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

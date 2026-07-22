@@ -940,6 +940,11 @@ const Index = () => {
                             onSeek={youtube.seekToProgress}
                             onVolume={youtube.setVolumeLevel}
                             onRate={(rating) => void youtube.rateCurrentTrack(rating)}
+                            onQueueNext={youtube.queueCurrentNext}
+                            onQueueLast={youtube.queueCurrentLast}
+                            onClearQueue={youtube.clearQueue}
+                            onStartMix={youtube.startMixFromCurrent}
+                            onSaveToPlaylist={(playlistId, playlistTitle) => void youtube.saveCurrentToPlaylist(playlistId, playlistTitle)}
                             onShare={() => void youtube.shareCurrent()}
                             onPlayLibraryItem={(item) => void youtube.playLibraryItem(item)}
                             onPlaySearchTrack={youtube.playSearchTrack}

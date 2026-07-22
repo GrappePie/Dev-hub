@@ -591,6 +591,9 @@ input[type=range]:hover::-webkit-slider-thumb {
 .youtube-music-more-menu [role="menuitem"] { gap: 9px; border-radius: 0; padding: 10px 9px; font-family: 'Press Start 2P', monospace; font-size: 6px; line-height: 1.5; }
 .youtube-music-more-menu [role="menuitem"]:focus { background: hsl(var(--yt-red, 350 92% 58%) / 0.22); color: hsl(var(--primary)); }
 .youtube-music-more-menu [role="separator"] { background: hsl(var(--border) / 0.6); }
+.youtube-music-more-subtrigger { gap: 9px; border-radius: 0; padding: 10px 9px; font-family: 'Press Start 2P', monospace; font-size: 6px; line-height: 1.5; }
+.youtube-music-more-subtrigger:focus, .youtube-music-more-subtrigger[data-state="open"] { background: hsl(var(--yt-red, 350 92% 58%) / 0.22); color: hsl(var(--primary)); }
+.youtube-music-menu-danger { color: hsl(var(--destructive)); }
 
 @media (max-width: 1180px) {
   .youtube-music-stage-grid { grid-template-columns: minmax(0, 1fr); }

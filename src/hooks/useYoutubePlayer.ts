@@ -239,6 +239,22 @@ const mapCurrentTrack = (track: YouTubeTrack): CurrentTrack => ({
     externalUrl: track.uri,
 });
 
+const currentTrackToYouTubeTrack = (track: CurrentTrack | null): YouTubeTrack | null => {
+    if (!track) return null;
+    const videoId = track.id.startsWith("yt-") ? track.id.slice(3) : track.id;
+    if (!videoId) return null;
+    return {
+        id: `yt-${videoId}`,
+        videoId,
+        uri: track.externalUrl || toWatchUrl(videoId),
+        title: track.title,
+        artist: track.artist,
+        image: track.albumArt || fallbackAlbumArt,
+        durationMs: track.durationMs,
+        duration: track.duration,
+    };
+};
+
 export const useYoutubePlayer = () => {
     const [playerHostEl, setPlayerHostEl] = useState<HTMLDivElement | null>(null);
     const playerHostRef = useCallback((node: HTMLDivElement | null) => {
@@ -1250,6 +1266,69 @@ export const useYoutubePlayer = () => {
         setQueueTracks((prev) => (prev.some((item) => item.videoId === track.videoId) ? prev : [...prev, track]));
     }, []);
 
+    const queueCurrentNext = useCallback(() => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track) return;
+        setQueueTracks((prev) => {
+            const next = [...prev];
+            const insertAt = Math.min(Math.max(queueIndexRef.current + 1, 0), next.length);
+            next.splice(insertAt, 0, track);
+            return next;
+        });
+        toast({ title: "Reproducirá a continuación", description: track.title });
+    }, [currentTrack]);
+
+    const queueCurrentLast = useCallback(() => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track) return;
+        setQueueTracks((prev) => [...prev, track]);
+        toast({ title: "Agregada a la fila", description: track.title });
+    }, [currentTrack]);
+
+    const clearQueue = useCallback(() => {
+        setQueueTracks([]);
+        setQueueIndex(-1);
+        queueIndexRef.current = -1;
+        toast({ title: "Fila descartada", description: "La pista actual seguirá reproduciéndose." });
+    }, []);
+
+    const startMixFromCurrent = useCallback(() => {
+        if (!currentTrack) return;
+        void searchAndPlay(`${currentTrack.artist} ${currentTrack.title} mix`);
+    }, [currentTrack, searchAndPlay]);
+
+    const saveCurrentToPlaylist = useCallback(async (playlistId: string, playlistTitle: string) => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track || !accessTokenRef.current) {
+            toast({ title: "Conecta YouTube", description: "Conecta tu cuenta para guardar canciones en playlists." });
+            return;
+        }
+        const url = new URL(`${YOUTUBE_API_BASE}/playlistItems`);
+        url.searchParams.set("part", "snippet");
+        const response = await fetch(url.toString(), {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${accessTokenRef.current}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                snippet: {
+                    playlistId,
+                    resourceId: { kind: "youtube#video", videoId: track.videoId },
+                },
+            }),
+        });
+        if (!response.ok) {
+            toast({
+                variant: "destructive",
+                title: "No se pudo guardar",
+                description: response.status === 409 ? "La canción ya está en esa playlist." : `YouTube respondió con el error ${response.status}.`,
+            });
+            return;
+        }
+        toast({ title: "Guardada en playlist", description: `${track.title} → ${playlistTitle}` });
+    }, [currentTrack]);
+
     const refreshQueue = useCallback(() => setQueueTracks((prev) => [...prev]), []);
 
     const toggleVideoMode = useCallback(() => {
@@ -1317,6 +1396,11 @@ export const useYoutubePlayer = () => {
         searchAndPlay,
         playSearchTrack,
         addToQueue,
+        queueCurrentNext,
+        queueCurrentLast,
+        clearQueue,
+        startMixFromCurrent,
+        saveCurrentToPlaylist,
         togglePlayPause,
         nextTrack,
         prevTrack,
