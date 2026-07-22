@@ -65,7 +65,15 @@ if not current then return -1 end
 local decoded = cjson.decode(current)
 if decoded.activeDeviceId == ARGV[1] then return 0 end
 if not decoded.commands then decoded.commands = {} end
-table.insert(decoded.commands, cjson.decode(ARGV[2]))
+local incoming = cjson.decode(ARGV[2])
+if incoming.type == 'volume' or incoming.type == 'seek' then
+  local filtered = {}
+  for _, command in ipairs(decoded.commands) do
+    if command.type ~= incoming.type then table.insert(filtered, command) end
+  end
+  decoded.commands = filtered
+end
+table.insert(decoded.commands, incoming)
 while #decoded.commands > 20 do table.remove(decoded.commands, 1) end
 decoded.version = decoded.version + 1
 redis.call("SET", KEYS[1], cjson.encode(decoded), "EX", ARGV[3])

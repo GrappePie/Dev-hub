@@ -1429,14 +1429,20 @@ export const useYoutubePlayer = () => {
         const now = Date.now();
         const optimisticSeek = optimisticSeekRef.current;
         const remoteProgress = state.durationMs ? (remotePositionMs / state.durationMs) * 100 : 0;
-        if (!optimisticSeek || now >= optimisticSeek.until || Math.abs(remoteProgress - optimisticSeek.value) < 2) {
+        const seekPending = optimisticSeek && (state.commands || []).some(
+            (command) => command.type === "seek" && Math.abs(command.value - optimisticSeek.value) < 0.5
+        );
+        if (!optimisticSeek || (!seekPending && now >= optimisticSeek.until) || Math.abs(remoteProgress - optimisticSeek.value) < 2) {
             optimisticSeekRef.current = null;
             setPositionMs(remotePositionMs);
         }
         setIsPlaying(state.isPlaying);
         const optimisticVolume = optimisticVolumeRef.current;
         const remoteVolume = state.volume ?? volumeRef.current;
-        if (!optimisticVolume || now >= optimisticVolume.until || Math.abs(remoteVolume - optimisticVolume.value) < 0.015) {
+        const volumePending = optimisticVolume && (state.commands || []).some(
+            (command) => command.type === "volume" && Math.abs(command.value - optimisticVolume.value) < 0.005
+        );
+        if (!optimisticVolume || (!volumePending && now >= optimisticVolume.until) || Math.abs(remoteVolume - optimisticVolume.value) < 0.015) {
             optimisticVolumeRef.current = null;
             setVolumeLevel(remoteVolume);
         }
