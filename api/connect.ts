@@ -1,7 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import type {
     ConnectPlaybackSnapshot,
+    ConnectRemoteCommand,
+    ConnectRemoteCommandInput,
     ConnectSessionState,
     ConnectTrack,
 } from "../src/lib/youtubeConnect.js";
@@ -18,7 +20,7 @@ interface ConnectApiResponse {
     setHeader: (name: string, value: string) => void;
 }
 
-type ConnectAction = "create" | "publish" | "claim";
+type ConnectAction = "create" | "publish" | "claim" | "command";
 
 interface ConnectRequestBody {
     action?: ConnectAction;
@@ -26,6 +28,8 @@ interface ConnectRequestBody {
     deviceId?: string;
     deviceName?: string;
     snapshot?: ConnectPlaybackSnapshot;
+    command?: ConnectRemoteCommandInput;
+    ackCommandId?: string;
 }
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24;
@@ -36,7 +40,21 @@ local current = redis.call("GET", KEYS[1])
 if not current then return -1 end
 local decoded = cjson.decode(current)
 if decoded.activeDeviceId ~= ARGV[1] then return 0 end
-redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3])
+local proposed = cjson.decode(ARGV[2])
+if decoded.command and (ARGV[4] == '' or decoded.command.id ~= ARGV[4]) then
+  proposed.command = decoded.command
+end
+redis.call("SET", KEYS[1], cjson.encode(proposed), "EX", ARGV[3])
+return 1
+`;
+const COMMAND_IF_REMOTE_SCRIPT = `
+local current = redis.call("GET", KEYS[1])
+if not current then return -1 end
+local decoded = cjson.decode(current)
+if decoded.activeDeviceId == ARGV[1] then return 0 end
+decoded.command = cjson.decode(ARGV[2])
+decoded.version = decoded.version + 1
+redis.call("SET", KEYS[1], cjson.encode(decoded), "EX", ARGV[3])
 return 1
 `;
 
@@ -89,7 +107,40 @@ const cleanSnapshot = (value: unknown): ConnectPlaybackSnapshot => {
         isPlaying: candidate.isPlaying === true,
         shuffleMode: candidate.shuffleMode === "smart" || candidate.shuffleMode === "shuffle" ? candidate.shuffleMode : "off",
         repeatMode: candidate.repeatMode === 1 || candidate.repeatMode === 2 ? candidate.repeatMode : 0,
+        volume: finiteNumber(candidate.volume ?? 1, 0, 1),
     };
+};
+
+const cleanCommand = (value: unknown, deviceName: string): ConnectRemoteCommand | null => {
+    if (!value || typeof value !== "object") return null;
+    const candidate = value as Partial<ConnectRemoteCommandInput>;
+    const id = randomUUID();
+    const common = { id, issuedAt: Date.now(), issuedBy: deviceName };
+    if (candidate.type === "toggle-play" || candidate.type === "next" || candidate.type === "previous" || candidate.type === "cycle-shuffle" || candidate.type === "cycle-repeat") {
+        return { ...common, type: candidate.type };
+    }
+    if (candidate.type === "seek") return { ...common, type: candidate.type, value: finiteNumber(candidate.value, 0, 100) };
+    if (candidate.type === "volume") return { ...common, type: candidate.type, value: finiteNumber(candidate.value, 0, 1) };
+    if (candidate.type === "play-track") {
+        const track = cleanTrack(candidate.track);
+        return track ? { ...common, type: candidate.type, track } : null;
+    }
+    if (candidate.type === "play-queue-index") {
+        return { ...common, type: candidate.type, queueIndex: Math.floor(finiteNumber(candidate.queueIndex, 0, 99)) };
+    }
+    if (candidate.type === "replace-queue") {
+        const queue = Array.isArray(candidate.queue)
+            ? candidate.queue.slice(0, 100).map(cleanTrack).filter((track): track is ConnectTrack => Boolean(track))
+            : [];
+        if (!queue.length) return null;
+        return {
+            ...common,
+            type: candidate.type,
+            queue,
+            queueIndex: Math.floor(finiteNumber(candidate.queueIndex, 0, queue.length - 1)),
+        };
+    }
+    return null;
 };
 
 const parseBody = (body: unknown): ConnectRequestBody => {
@@ -182,6 +233,29 @@ export default async function handler(request: ConnectApiRequest, response: Conn
             return;
         }
 
+        if (body.action === "command") {
+            const command = cleanCommand(body.command, deviceName);
+            if (!command) {
+                response.status(400).json({ error: "El comando remoto no es válido." });
+                return;
+            }
+            const result = await redis.eval<[string, string, number], number>(
+                COMMAND_IF_REMOTE_SCRIPT,
+                [key],
+                [deviceId, JSON.stringify(command), SESSION_TTL_SECONDS]
+            );
+            if (result === -1) {
+                response.status(404).json({ error: "La sesión ya no existe o el código es incorrecto." });
+                return;
+            }
+            if (result !== 1) {
+                response.status(409).json({ error: "Este dispositivo ya controla la reproducción." });
+                return;
+            }
+            response.status(202).json(await redis.get<ConnectSessionState>(key));
+            return;
+        }
+
         if (body.action === "publish") {
             const state: ConnectSessionState = {
                 ...cleanSnapshot(body.snapshot),
@@ -190,10 +264,10 @@ export default async function handler(request: ConnectApiRequest, response: Conn
                 version: existing.version + 1,
                 updatedAt: now,
             };
-            const result = await redis.eval<[string, string, number], number>(
+            const result = await redis.eval<[string, string, number, string], number>(
                 PUBLISH_IF_OWNER_SCRIPT,
                 [key],
-                [deviceId, JSON.stringify(state), SESSION_TTL_SECONDS]
+                [deviceId, JSON.stringify(state), SESSION_TTL_SECONDS, cleanText(body.ackCommandId, 100)]
             );
             if (result === -1) {
                 response.status(404).json({ error: "La sesión ya no existe o el código es incorrecto." });
@@ -207,7 +281,7 @@ export default async function handler(request: ConnectApiRequest, response: Conn
                 });
                 return;
             }
-            response.status(200).json(state);
+            response.status(200).json(await redis.get<ConnectSessionState>(key) || state);
             return;
         }
 

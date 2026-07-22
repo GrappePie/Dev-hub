@@ -3,7 +3,7 @@ import { toast } from "@/hooks/use-toast";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
 import { getNextShuffleMode } from "@/lib/shuffleMode";
 import useYoutubeConnect from "@/hooks/useYoutubeConnect";
-import type { ConnectPlaybackSnapshot, ConnectSessionState } from "@/lib/youtubeConnect";
+import type { ConnectPlaybackSnapshot, ConnectRemoteCommand, ConnectSessionState } from "@/lib/youtubeConnect";
 import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
 
 const YOUTUBE_IFRAME_API = "https://www.youtube.com/iframe_api";
@@ -1390,6 +1390,7 @@ export const useYoutubePlayer = () => {
         setQueueIndex(nextIndex);
         setShuffleMode(state.shuffleMode);
         setRepeatMode(state.repeatMode);
+        setVolumeLevel(state.volume ?? volumeRef.current);
         setCurrentTrack(mapCurrentTrack(track));
         setDurationMs(state.durationMs || track.durationMs);
         setPositionMs(resumePositionMs);
@@ -1408,7 +1409,48 @@ export const useYoutubePlayer = () => {
             if (state.isPlaying) player.playVideo();
             else player.pauseVideo();
         }, 250);
-    }, [playerReady, pushRecent]);
+    }, [playerReady, pushRecent, setVolumeLevel]);
+
+    const applyRemoteState = useCallback((state: ConnectSessionState, remotePositionMs: number) => {
+        const track = state.track as YouTubeTrack | null;
+        const remoteQueue = state.queue as YouTubeTrack[];
+        playerRef.current?.pauseVideo();
+        queueRef.current = remoteQueue;
+        queueIndexRef.current = state.queueIndex;
+        shuffleModeRef.current = state.shuffleMode;
+        repeatModeRef.current = state.repeatMode;
+        setQueueTracks(remoteQueue);
+        setQueueIndex(state.queueIndex);
+        setShuffleMode(state.shuffleMode);
+        setRepeatMode(state.repeatMode);
+        setCurrentTrack(track ? mapCurrentTrack(track) : null);
+        setDurationMs(state.durationMs);
+        setPositionMs(remotePositionMs);
+        setIsPlaying(state.isPlaying);
+        setVolumeLevel(state.volume ?? volumeRef.current);
+        setStatusText(`Controlando ${state.activeDeviceName}.`);
+    }, [setVolumeLevel]);
+
+    const executeRemoteCommand = useCallback(async (command: ConnectRemoteCommand) => {
+        switch (command.type) {
+            case "toggle-play": togglePlayPause(); break;
+            case "next": nextTrack(); break;
+            case "previous": prevTrack(); break;
+            case "cycle-shuffle": cycleShuffle(); break;
+            case "cycle-repeat": cycleRepeat(); break;
+            case "seek": seekToProgress(command.value); break;
+            case "volume": setVolumeLevel(command.value); break;
+            case "play-track": playSearchTrack(command.track as YouTubeTrack); break;
+            case "play-queue-index": playQueueIndex(command.queueIndex); break;
+            case "replace-queue": {
+                const nextQueue = command.queue as YouTubeTrack[];
+                queueRef.current = nextQueue;
+                setQueueTracks(nextQueue);
+                playQueueIndex(command.queueIndex);
+                break;
+            }
+        }
+    }, [cycleRepeat, cycleShuffle, nextTrack, playQueueIndex, playSearchTrack, prevTrack, seekToProgress, setVolumeLevel, togglePlayPause]);
 
     const connectSnapshot = useMemo<ConnectPlaybackSnapshot>(() => ({
         track: currentTrackToYouTubeTrack(currentTrack),
@@ -1419,13 +1461,69 @@ export const useYoutubePlayer = () => {
         isPlaying,
         shuffleMode,
         repeatMode,
-    }), [currentTrack, durationMs, isPlaying, positionMs, queueIndex, queueTracks, repeatMode, shuffleMode]);
+        volume,
+    }), [currentTrack, durationMs, isPlaying, positionMs, queueIndex, queueTracks, repeatMode, shuffleMode, volume]);
 
     const connect = useYoutubeConnect({
         snapshot: connectSnapshot,
         onRemotePause: pauseForRemoteDevice,
         onTakeover: applyConnectSession,
+        onRemoteState: applyRemoteState,
+        onRemoteCommand: executeRemoteCommand,
     });
+
+    const isRemoteControl = connect.isConnected && !connect.isActiveDevice;
+    const remoteTogglePlayPause = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "toggle-play" });
+        else togglePlayPause();
+    }, [connect, isRemoteControl, togglePlayPause]);
+    const remoteNextTrack = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "next" });
+        else nextTrack();
+    }, [connect, isRemoteControl, nextTrack]);
+    const remotePrevTrack = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "previous" });
+        else prevTrack();
+    }, [connect, isRemoteControl, prevTrack]);
+    const remoteCycleShuffle = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "cycle-shuffle" });
+        else cycleShuffle();
+    }, [connect, cycleShuffle, isRemoteControl]);
+    const remoteCycleRepeat = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "cycle-repeat" });
+        else cycleRepeat();
+    }, [connect, cycleRepeat, isRemoteControl]);
+    const remoteSeek = useCallback((value: number) => {
+        if (isRemoteControl) void connect.sendCommand({ type: "seek", value });
+        else seekToProgress(value);
+    }, [connect, isRemoteControl, seekToProgress]);
+    const remoteVolume = useCallback((value: number) => {
+        if (isRemoteControl) void connect.sendCommand({ type: "volume", value });
+        else setVolumeLevel(value);
+    }, [connect, isRemoteControl, setVolumeLevel]);
+    const remotePlaySearchTrack = useCallback((track: YouTubeTrack) => {
+        if (isRemoteControl) void connect.sendCommand({ type: "play-track", track });
+        else playSearchTrack(track);
+    }, [connect, isRemoteControl, playSearchTrack]);
+    const remotePlayQueueTrack = useCallback((trackId: string) => {
+        if (isRemoteControl) {
+            const remoteIndex = queueRef.current.findIndex((item) => item.id === trackId);
+            if (remoteIndex >= 0) void connect.sendCommand({ type: "play-queue-index", queueIndex: remoteIndex });
+        } else playQueueTrack(trackId);
+    }, [connect, isRemoteControl, playQueueTrack]);
+    const remotePlayLibraryItem = useCallback(async (item: YouTubeLibraryItem) => {
+        if (!isRemoteControl) return playLibraryItem(item);
+        if (item.kind === "track") {
+            await connect.sendCommand({ type: "play-track", track: item });
+            return;
+        }
+        const tracks = await fetchPlaylistTracks(item.playlistId);
+        if (!tracks.length) {
+            toast({ title: "Playlist vacia", description: "No se encontraron videos reproducibles." });
+            return;
+        }
+        await connect.sendCommand({ type: "replace-queue", queue: tracks, queueIndex: 0 });
+    }, [connect, fetchPlaylistTracks, isRemoteControl, playLibraryItem]);
 
     const progress = useMemo(() => {
         if (!durationMs) return 0;
@@ -1470,27 +1568,27 @@ export const useYoutubePlayer = () => {
         logout,
         fetchLibrary,
         loadMoreLibrarySection,
-        playLibraryItem,
+        playLibraryItem: remotePlayLibraryItem,
         clearSearchResults,
         searchCatalog,
         searchAndPlay,
-        playSearchTrack,
+        playSearchTrack: remotePlaySearchTrack,
         addToQueue,
         queueCurrentNext,
         queueCurrentLast,
         clearQueue,
         startMixFromCurrent,
         saveCurrentToPlaylist,
-        togglePlayPause,
-        nextTrack,
-        prevTrack,
-        cycleShuffle,
-        cycleRepeat,
-        seekToProgress,
-        setVolumeLevel,
+        togglePlayPause: remoteTogglePlayPause,
+        nextTrack: remoteNextTrack,
+        prevTrack: remotePrevTrack,
+        cycleShuffle: remoteCycleShuffle,
+        cycleRepeat: remoteCycleRepeat,
+        seekToProgress: remoteSeek,
+        setVolumeLevel: remoteVolume,
         rateCurrentTrack,
         shareCurrent,
-        playQueueTrack,
+        playQueueTrack: remotePlayQueueTrack,
         refreshQueue,
         reset,
     };

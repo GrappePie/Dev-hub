@@ -20,13 +20,29 @@ export interface ConnectPlaybackSnapshot {
     isPlaying: boolean;
     shuffleMode: ConnectShuffleMode;
     repeatMode: 0 | 1 | 2;
+    volume: number;
 }
+
+export type ConnectRemoteCommand =
+    | { id: string; type: "toggle-play" | "next" | "previous" | "cycle-shuffle" | "cycle-repeat"; issuedAt: number; issuedBy: string }
+    | { id: string; type: "seek" | "volume"; value: number; issuedAt: number; issuedBy: string }
+    | { id: string; type: "play-track"; track: ConnectTrack; issuedAt: number; issuedBy: string }
+    | { id: string; type: "play-queue-index"; queueIndex: number; issuedAt: number; issuedBy: string }
+    | { id: string; type: "replace-queue"; queue: ConnectTrack[]; queueIndex: number; issuedAt: number; issuedBy: string };
+
+export type ConnectRemoteCommandInput =
+    | { type: "toggle-play" | "next" | "previous" | "cycle-shuffle" | "cycle-repeat" }
+    | { type: "seek" | "volume"; value: number }
+    | { type: "play-track"; track: ConnectTrack }
+    | { type: "play-queue-index"; queueIndex: number }
+    | { type: "replace-queue"; queue: ConnectTrack[]; queueIndex: number };
 
 export interface ConnectSessionState extends ConnectPlaybackSnapshot {
     version: number;
     activeDeviceId: string;
     activeDeviceName: string;
     updatedAt: number;
+    command?: ConnectRemoteCommand;
 }
 
 export interface ConnectApiError {
@@ -55,7 +71,8 @@ const connectRequest = async <T>(url: string, init?: RequestInit): Promise<T> =>
     });
     const payload = (await response.json().catch(() => ({ error: "Respuesta inválida del servidor." }))) as T | ConnectApiError;
     if (!response.ok) {
-        const error = new Error("error" in payload ? payload.error : "No se pudo sincronizar el dispositivo.");
+        const apiError = payload && typeof payload === "object" && "error" in payload ? payload as ConnectApiError : null;
+        const error = new Error(apiError?.error || "No se pudo sincronizar el dispositivo.");
         Object.assign(error, { status: response.status, payload });
         throw error;
     }
@@ -71,10 +88,16 @@ export const createConnectSession = (code: string, deviceId: string, deviceName:
 export const readConnectSession = (code: string) =>
     connectRequest<ConnectSessionState>(`/api/connect?code=${encodeURIComponent(normalizeConnectCode(code))}`);
 
-export const publishConnectSession = (code: string, deviceId: string, deviceName: string, snapshot: ConnectPlaybackSnapshot) =>
+export const publishConnectSession = (code: string, deviceId: string, deviceName: string, snapshot: ConnectPlaybackSnapshot, ackCommandId = "") =>
     connectRequest<ConnectSessionState>("/api/connect", {
         method: "POST",
-        body: JSON.stringify({ action: "publish", code, deviceId, deviceName, snapshot }),
+        body: JSON.stringify({ action: "publish", code, deviceId, deviceName, snapshot, ackCommandId }),
+    });
+
+export const sendConnectCommand = (code: string, deviceId: string, deviceName: string, command: ConnectRemoteCommandInput) =>
+    connectRequest<ConnectSessionState>("/api/connect", {
+        method: "POST",
+        body: JSON.stringify({ action: "command", code, deviceId, deviceName, command }),
     });
 
 export const claimConnectSession = (code: string, deviceId: string, deviceName: string) =>

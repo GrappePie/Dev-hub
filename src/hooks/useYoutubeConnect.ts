@@ -9,8 +9,11 @@ import {
     normalizeConnectCode,
     publishConnectSession,
     readConnectSession,
+    sendConnectCommand,
     type ConnectApiError,
     type ConnectPlaybackSnapshot,
+    type ConnectRemoteCommand,
+    type ConnectRemoteCommandInput,
     type ConnectSessionState,
 } from "@/lib/youtubeConnect";
 
@@ -45,9 +48,11 @@ interface UseYoutubeConnectOptions {
     snapshot: ConnectPlaybackSnapshot;
     onRemotePause: () => void;
     onTakeover: (state: ConnectSessionState, positionMs: number) => void;
+    onRemoteState: (state: ConnectSessionState, positionMs: number) => void;
+    onRemoteCommand: (command: ConnectRemoteCommand) => void | Promise<void>;
 }
 
-export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYoutubeConnectOptions) => {
+export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover, onRemoteState, onRemoteCommand }: UseYoutubeConnectOptions) => {
     const deviceId = useMemo(makeDeviceId, []);
     const deviceName = useMemo(detectDeviceName, []);
     const snapshotRef = useRef(snapshot);
@@ -56,6 +61,8 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYo
     const requestRunningRef = useRef(false);
     const wasActiveRef = useRef(false);
     const suspendPublishUntilRef = useRef(0);
+    const processedCommandRef = useRef("");
+    const pendingCommandAckRef = useRef("");
 
     const [code, setCode] = useState("");
     const [joinCode, setJoinCode] = useState("");
@@ -89,7 +96,22 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYo
                 description: "Este dispositivo quedó como control remoto.",
             });
         }
-    }, [deviceId, onRemotePause]);
+        if (next.activeDeviceId !== deviceId) {
+            onRemoteState(next, extrapolateConnectPosition(next));
+            return;
+        }
+        if (next.command && next.command.id !== processedCommandRef.current) {
+            processedCommandRef.current = next.command.id;
+            void Promise.resolve(onRemoteCommand(next.command))
+                .then(() => {
+                    pendingCommandAckRef.current = next.command?.id || "";
+                })
+                .catch(() => {
+                    processedCommandRef.current = "";
+                    setError("No se pudo ejecutar un comando remoto.");
+                });
+        }
+    }, [deviceId, onRemoteCommand, onRemotePause, onRemoteState]);
 
     const createSession = useCallback(async () => {
         setBusy(true);
@@ -176,6 +198,17 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYo
         toast({ title: "Código copiado", description: "Pégalo en Dev Hub desde el otro dispositivo." });
     }, []);
 
+    const sendCommand = useCallback(async (command: ConnectRemoteCommandInput) => {
+        if (!codeRef.current || sessionRef.current?.activeDeviceId === deviceId) return;
+        setError("");
+        try {
+            const next = await sendConnectCommand(codeRef.current, deviceId, deviceName, command);
+            handleRemoteOwner(next);
+        } catch (requestError) {
+            setError(getErrorPayload(requestError)?.error || "No se pudo enviar el comando remoto.");
+        }
+    }, [deviceId, deviceName, handleRemoteOwner]);
+
     useEffect(() => {
         const storedCode = normalizeConnectCode(localStorage.getItem(CONNECT_CODE_STORAGE) || "");
         if (storedCode.length !== 16) return;
@@ -210,7 +243,9 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYo
             try {
                 const current = sessionRef.current;
                 if (current?.activeDeviceId === deviceId && Date.now() >= suspendPublishUntilRef.current) {
-                    const next = await publishConnectSession(codeRef.current, deviceId, deviceName, snapshotRef.current);
+                    const ackCommandId = pendingCommandAckRef.current;
+                    const next = await publishConnectSession(codeRef.current, deviceId, deviceName, snapshotRef.current, ackCommandId);
+                    if (ackCommandId && next.command?.id !== ackCommandId) pendingCommandAckRef.current = "";
                     handleRemoteOwner(next);
                 } else {
                     const next = await readConnectSession(codeRef.current);
@@ -250,6 +285,7 @@ export const useYoutubeConnect = ({ snapshot, onRemotePause, onTakeover }: UseYo
         takeOver,
         disconnect,
         copyCode,
+        sendCommand,
     };
 };
 
