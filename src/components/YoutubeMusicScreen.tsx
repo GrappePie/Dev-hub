@@ -591,7 +591,15 @@ const CompactPlayerBar = ({ currentTrack, playlists, isPlaying, progress, volume
         </div>
         <div className="youtube-music-player-center">
             <div className="youtube-music-player-buttons">
-                <button className={shuffleMode !== "off" ? "is-on" : ""} onClick={onShuffleCycle}><PixelIcon icon={Shuffle} size="sm" /></button>
+                <button
+                    aria-label={shuffleMode === "smart" ? "Smart Shuffle activado" : shuffleMode === "shuffle" ? "Shuffle activado" : "Shuffle desactivado"}
+                    className={shuffleMode === "smart" ? "is-on is-smart" : shuffleMode === "shuffle" ? "is-on" : ""}
+                    onClick={onShuffleCycle}
+                    title={shuffleMode === "smart" ? "SMART SHUFFLE" : shuffleMode === "shuffle" ? "SHUFFLE" : "SHUFFLE OFF"}
+                >
+                    <PixelIcon icon={Shuffle} size="sm" />
+                    {shuffleMode === "smart" && <span className="youtube-music-smart-badge">S</span>}
+                </button>
                 <button onClick={onPrev}><PixelIcon icon={ArrowLeftBox} size="sm" /></button>
                 <button className="is-primary" onClick={onPlayPause}>{isPlaying ? <span className="youtube-music-pause">Ⅱ</span> : <PixelIcon icon={Play} size="sm" />}</button>
                 <button onClick={onNext}><PixelIcon icon={ArrowRightBox} size="sm" /></button>

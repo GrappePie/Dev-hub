@@ -579,6 +579,8 @@ input[type=range]:hover::-webkit-slider-thumb {
 .youtube-music-player-buttons { display: flex; justify-content: center; align-items: center; gap: 7px; }
 .youtube-music-player-buttons button, .youtube-music-player-utils button { width: 32px; height: 28px; display: grid; place-items: center; border: 2px solid hsl(var(--border) / 0.65); color: hsl(var(--muted-foreground)); background: hsl(var(--secondary)); }
 .youtube-music-player-buttons button:hover, .youtube-music-player-utils button:hover, .youtube-music-player-buttons button.is-on, .youtube-music-player-utils button.is-on { color: hsl(var(--primary)); border-color: hsl(var(--primary)); }
+.youtube-music-player-buttons button.is-smart { position: relative; color: hsl(var(--accent)); border-color: hsl(var(--accent)); box-shadow: 0 0 8px hsl(var(--accent) / 0.45); }
+.youtube-music-smart-badge { position: absolute; top: -5px; right: -5px; display: grid; place-items: center; width: 12px; height: 12px; border: 1px solid hsl(var(--background)); background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); font-family: 'Press Start 2P', monospace; font-size: 5px; }
 .youtube-music-player-utils button:disabled { cursor: not-allowed; opacity: 0.35; }
 .youtube-music-player-buttons button.is-primary { width: 44px; height: 34px; background: hsl(var(--yt-red)); color: white; border-color: hsl(var(--primary)); box-shadow: 3px 3px 0 hsl(240 30% 2%); }
 .youtube-music-pause { font-family: 'Press Start 2P', monospace; font-size: 10px; }

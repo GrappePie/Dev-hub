@@ -1132,7 +1132,11 @@ export const useYoutubePlayer = () => {
     const nextTrack = useCallback(() => {
         const tracks = queueRef.current;
         if (!tracks.length) return;
-        if (shuffleModeRef.current !== "off" && tracks.length > 1) {
+        if (shuffleModeRef.current === "smart") {
+            handleTrackEnd();
+            return;
+        }
+        if (shuffleModeRef.current === "shuffle" && tracks.length > 1) {
             playQueueIndex(Math.floor(Math.random() * tracks.length));
             return;
         }
@@ -1142,7 +1146,7 @@ export const useYoutubePlayer = () => {
             return;
         }
         if (repeatMode > 0) playQueueIndex(0);
-    }, [playQueueIndex, repeatMode]);
+    }, [handleTrackEnd, playQueueIndex, repeatMode]);
 
     const prevTrack = useCallback(() => {
         const tracks = queueRef.current;
@@ -1157,7 +1161,7 @@ export const useYoutubePlayer = () => {
 
     const cycleShuffle = useCallback(() => {
         setShuffleMode((prev) => {
-            const next = getNextShuffleMode(prev);
+            const next = getNextShuffleMode(prev, { smart: true });
             shuffleModeRef.current = next;
             return next;
         });
@@ -1295,8 +1299,13 @@ export const useYoutubePlayer = () => {
 
     const startMixFromCurrent = useCallback(() => {
         if (!currentTrack) return;
-        void searchAndPlay(`${currentTrack.artist} ${currentTrack.title} mix`);
-    }, [currentTrack, searchAndPlay]);
+        setShuffleMode("smart");
+        shuffleModeRef.current = "smart";
+        toast({
+            title: "Smart Shuffle activado",
+            description: `Usaremos ${currentTrack.title} para encontrar la siguiente canción.`,
+        });
+    }, [currentTrack]);
 
     const saveCurrentToPlaylist = useCallback(async (playlistId: string, playlistTitle: string) => {
         const track = currentTrackToYouTubeTrack(currentTrack);
