@@ -34,6 +34,7 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
     const handledRevisionRef = useRef("");
     const autoNextRevisionRef = useRef(-1);
     const scheduledRef = useRef<number>();
+    const playingProviderRef = useRef<MixyProvider | null>(null);
     const adaptersRef = useRef({ spotify, youtube, soundcloud });
     const syncStateRef = useRef({ room: mixy.room, serverOffsetMs: mixy.serverOffsetMs, source: null as MixySource | null });
     adaptersRef.current = { spotify, youtube, soundcloud };
@@ -151,6 +152,8 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
     useEffect(() => {
         if (!enabled || !mixy.room || !mixy.ready || !mixy.activeTrack) {
             if (scheduledRef.current) window.clearTimeout(scheduledRef.current);
+            if (playingProviderRef.current) setPlaying(playingProviderRef.current, false);
+            playingProviderRef.current = null;
             handledRevisionRef.current = "";
             setActiveProvider(null);
             setSyncOffsetMs(null);
@@ -158,6 +161,8 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
             return;
         }
         if (!source) {
+            if (playingProviderRef.current) setPlaying(playingProviderRef.current, false);
+            playingProviderRef.current = null;
             setActiveProvider(null);
             setSyncOffsetMs(null);
             setMessage("NINGUNA FUENTE COMPATIBLE EN ESTE DISPOSITIVO");
@@ -169,6 +174,10 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         if (handledRevisionRef.current === revisionKey) return;
         if (scheduledRef.current) window.clearTimeout(scheduledRef.current);
         handledRevisionRef.current = revisionKey;
+        if (playingProviderRef.current && playingProviderRef.current !== source.provider) {
+            setPlaying(playingProviderRef.current, false);
+        }
+        playingProviderRef.current = source.provider;
         setActiveProvider(source.provider);
         setMessage(`SYNC VIA ${source.provider.toUpperCase()}`);
 
