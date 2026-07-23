@@ -11,6 +11,8 @@ import ReactiveBackground, { type ReactiveBackgroundVariant } from "@/components
 import useSpotifyPlayer from "@/hooks/useSpotifyPlayer";
 import useSoundcloudPlayer from "@/hooks/useSoundcloudPlayer";
 import useYoutubePlayer from "@/hooks/useYoutubePlayer";
+import useMixyRoom from "@/hooks/useMixyRoom";
+import useMixyPlayback from "@/hooks/useMixyPlayback";
 import type { YouTubeLibrarySection } from "@/hooks/useYoutubePlayer";
 import type { SoundcloudLibrarySection } from "@/hooks/useSoundcloudPlayer";
 import { useAudioAnalyser } from "@/hooks/useAudioAnalyser";
@@ -28,6 +30,7 @@ import {
 } from "@/lib/platformTheme";
 import ArtistDialog from "@/components/ArtistDialog";
 import type { ArtistData, ArtistTopTrack } from "@/hooks/useSpotifyPlayer";
+import type { MixyProvider, MixySearchCandidate } from "@/lib/mixy";
 
 const Index = () => {
     const spotify = useSpotifyPlayer();
@@ -57,6 +60,8 @@ const Index = () => {
     const [youtubeMode, setYoutubeMode] = useState(false);
     const [fileaMode, setFileaMode] = useState(false);
     const [mixyMode, setMixyMode] = useState(false);
+    const [mixyActiveProvider, setMixyActiveProvider] = useState<MixyProvider | null>(null);
+    const [mixySyncOffset, setMixySyncOffset] = useState<number | null>(null);
     const [pendingModeActivation, setPendingModeActivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [pendingModeDeactivation, setPendingModeDeactivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [soundcloudLibrarySection, setSoundcloudLibrarySection] = useState<SoundcloudLibrarySection>("playlists");
@@ -77,12 +82,32 @@ const Index = () => {
     const isYouTubeMode = selectedPlatform === "youtube" && youtubeMode;
     const isFileaMode = selectedPlatform === "filea" && fileaMode;
     const isMixyMode = selectedPlatform === "mixy" && mixyMode;
+    const mixyAvailableProviders = useMemo<MixyProvider[]>(() => {
+        const providers: MixyProvider[] = [];
+        if (spotify.isAuthenticated) providers.push("spotify");
+        if (youtube.isReady) providers.push("youtube");
+        if (soundcloud.sdkReady) providers.push("soundcloud");
+        return providers;
+    }, [soundcloud.sdkReady, spotify.isAuthenticated, youtube.isReady]);
+    const mixy = useMixyRoom({
+        providers: mixyAvailableProviders,
+        activeProvider: mixyActiveProvider,
+        syncOffsetMs: mixySyncOffset,
+    });
+    const mixyPlayback = useMixyPlayback({ enabled: isMixyMode, mixy, spotify, youtube, soundcloud });
+
+    useEffect(() => {
+        setMixyActiveProvider(mixyPlayback.activeProvider);
+        setMixySyncOffset(mixyPlayback.syncOffsetMs);
+    }, [mixyPlayback.activeProvider, mixyPlayback.syncOffsetMs]);
     const isSessionActive = isLoggedIn || isSoundcloudMode || isYouTubeMode || isFileaMode || isMixyMode;
     const showOAuthBridge = !isLoggedIn && oauthReturnDetected && spotify.isAuthLoading;
     const lastAuthFeedbackIdRef = useRef<number | null>(null);
     const youtubeVolumeBeforeMuteRef = useRef(0.5);
 
-    const activePlatform = isLoggedIn ? "spotify" : isSoundcloudMode ? "soundcloud" : isYouTubeMode ? "youtube" : null;
+    const activePlatform = isMixyMode
+        ? (mixyPlayback.activeProvider === "local" ? null : mixyPlayback.activeProvider)
+        : isLoggedIn ? "spotify" : isSoundcloudMode ? "soundcloud" : isYouTubeMode ? "youtube" : null;
     const { analyser, ytCaptureActive: captureActive, requestYouTubeCapture } = useAudioAnalyser(activePlatform);
     const analysisTrackId = activePlatform === "spotify"
         ? spotify.currentTrack?.id ?? null
@@ -367,8 +392,6 @@ const Index = () => {
                     sfx("coin");
                     setPendingModeActivation(null);
                     setPendingModeDeactivation(null);
-                    soundcloud.reset();
-                    youtube.reset();
                     setSoundcloudMode(false);
                     setYoutubeMode(false);
                     setFileaMode(false);
@@ -474,6 +497,32 @@ const Index = () => {
         setArtistDialogLoading(false);
     }, [soundcloud]);
 
+    const mixyCandidates = useMemo<MixySearchCandidate[]>(() => [
+        ...spotify.searchResults.tracks.map((track) => ({
+            provider: "spotify" as const, id: track.id, uri: track.uri,
+            title: track.name, artist: track.artist, image: track.image,
+            durationMs: 0, offsetMs: 0, available: spotify.isAuthenticated,
+        })),
+        ...youtube.searchResults.map((track) => ({
+            provider: "youtube" as const, id: track.videoId, uri: track.uri,
+            title: track.title, artist: track.artist, image: track.image,
+            durationMs: track.durationMs, offsetMs: 0, available: youtube.isReady,
+        })),
+        ...soundcloud.searchResults.map((track) => ({
+            provider: "soundcloud" as const, id: String(track.id), uri: track.permalink_url,
+            title: track.title, artist: track.artist || "SoundCloud", image: track.artwork_url || "",
+            durationMs: track.duration_ms || 0, offsetMs: 0, available: soundcloud.sdkReady,
+        })),
+    ], [soundcloud.sdkReady, soundcloud.searchResults, spotify.isAuthenticated, spotify.searchResults.tracks, youtube.isReady, youtube.searchResults]);
+
+    const handleMixySearch = useCallback(async (query: string) => {
+        await Promise.all([
+            youtube.searchCatalog(query),
+            spotify.isAuthenticated ? spotify.searchCatalog(query) : Promise.resolve(),
+            soundcloud.isAuthenticated ? soundcloud.searchCatalog(query) : Promise.resolve(),
+        ]);
+    }, [soundcloud.isAuthenticated, soundcloud.searchCatalog, spotify.isAuthenticated, spotify.searchCatalog, youtube.searchCatalog]);
+
     const queueById = useMemo(() => {
         const map = new Map<string, (typeof spotify.queue)[number]>();
         spotify.queue.forEach((track) => map.set(track.id, track));
@@ -504,9 +553,19 @@ const Index = () => {
             ? "Desconectar YT"
             : "Conectar YT";
     const loginMessage = selectedPlatform === "spotify" ? spotify.statusText : PLATFORM_MESSAGE[selectedPlatform];
-    const playbackActive = isLoggedIn ? spotify.isPlaying : isSoundcloudMode ? soundcloud.isPlaying : isYouTubeMode ? youtube.isPlaying : false;
-    const playbackProgress = isLoggedIn ? spotify.progress : isSoundcloudMode ? soundcloud.progress : isYouTubeMode ? youtube.progress : 0;
-    const playbackVolume = isLoggedIn ? spotify.volume : isSoundcloudMode ? soundcloud.volume : isYouTubeMode ? youtube.volume : 0.35;
+    const playbackActive = isMixyMode
+        ? mixy.room?.playback.isPlaying === true
+        : isLoggedIn ? spotify.isPlaying : isSoundcloudMode ? soundcloud.isPlaying : isYouTubeMode ? youtube.isPlaying : false;
+    const playbackProgress = isMixyMode && mixy.activeTrack
+        ? (mixy.room?.playback.positionMs || 0) / Math.max(1, mixy.room?.playback.durationMs || mixy.activeTrack.durationMs) * 100
+        : isLoggedIn ? spotify.progress : isSoundcloudMode ? soundcloud.progress : isYouTubeMode ? youtube.progress : 0;
+    const playbackVolume = isMixyMode && mixyPlayback.activeProvider === "spotify"
+        ? spotify.volume
+        : isMixyMode && mixyPlayback.activeProvider === "youtube"
+            ? youtube.volume
+            : isMixyMode && mixyPlayback.activeProvider === "soundcloud"
+                ? soundcloud.volume
+                : isLoggedIn ? spotify.volume : isSoundcloudMode ? soundcloud.volume : isYouTubeMode ? youtube.volume : 0.35;
 
     return (
         <>
@@ -528,15 +587,15 @@ const Index = () => {
                 onComplete={handleTransitionComplete}
                 onTransitionEnd={() => setTransitioning(false)}
             />
-            <div className={`${isYouTubeMode ? "max-w-[2200px]" : "max-w-screen-xl"} mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 relative z-10`}>
+            <div className={`${isYouTubeMode || isMixyMode ? "max-w-[2200px]" : "max-w-screen-xl"} mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 relative z-10`}>
                 <div className="pixel-box-elevated overflow-hidden">
                     {!showOAuthBridge && (
                         <Header
                             isSessionActive={isSessionActive}
-                            showSearchControls={isLoggedIn || isSoundcloudMode || isYouTubeMode}
-                            showDeviceControl={isLoggedIn}
-                            showLibraryControl={isLoggedIn}
-                            showAuthControl={showYoutubeAuthControl}
+                            showSearchControls={!isMixyMode && (isLoggedIn || isSoundcloudMode || isYouTubeMode)}
+                            showDeviceControl={!isMixyMode && isLoggedIn}
+                            showLibraryControl={!isMixyMode && isLoggedIn}
+                            showAuthControl={!isMixyMode && showYoutubeAuthControl}
                             authControlLabel={youtubeAuthLabel}
                             authControlTitle={youtube.accountName || "YouTube"}
                             authControlDisabled={youtube.isAuthLoading}
@@ -873,7 +932,26 @@ const Index = () => {
                         </div>
                     )}
 
-                    {isLoggedIn ? (
+                    {isMixyMode ? (
+                        <MixyScreen
+                            mixy={mixy}
+                            candidates={mixyCandidates}
+                            searchLoading={spotify.searchLoading || youtube.searchLoading || soundcloud.searchLoading}
+                            onSearch={handleMixySearch}
+                            activeSource={mixyPlayback.source}
+                            syncOffsetMs={mixyPlayback.syncOffsetMs}
+                            syncMessage={mixyPlayback.message}
+                            spotifyConnected={spotify.isAuthenticated}
+                            youtubeConnected={youtube.isReady}
+                            soundcloudConnected={soundcloud.isAuthenticated}
+                            onConnectSpotify={() => void spotify.startLogin()}
+                            onConnectYoutube={() => void youtube.startLogin()}
+                            onConnectSoundcloud={() => void soundcloud.startLogin()}
+                            youtubePlayerHostRef={youtube.playerHostRef}
+                            soundcloudIframeRef={soundcloud.iframeRef}
+                            soundcloudIframeSrc={soundcloud.iframeSrc}
+                        />
+                    ) : isLoggedIn ? (
                         <PlayerScreen
                             currentTrack={spotify.currentTrack}
                             queueTracks={spotify.queue}
@@ -1028,8 +1106,6 @@ const Index = () => {
                         />
                     ) : isFileaMode ? (
                         <FileaScreen />
-                    ) : isMixyMode ? (
-                        <MixyScreen onChoosePlatform={onPlatformSelect} />
                     ) : (
                         <>
                             {showOAuthBridge ? (

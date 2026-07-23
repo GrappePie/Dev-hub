@@ -1465,6 +1465,8 @@ export const useSpotifyPlayer = () => {
         volume,
         isLiked,
         progress,
+        positionMs,
+        durationMs,
         currentTime: formatMs(positionMs),
         totalTime: formatMs(durationMs || currentTrack?.durationMs || 0),
         devices,

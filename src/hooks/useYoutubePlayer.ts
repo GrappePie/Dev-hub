@@ -1595,6 +1595,7 @@ export const useYoutubePlayer = () => {
         volume,
         currentRating,
         ratingLoading,
+        positionMs,
         durationMs,
         progress,
         currentTime: formatMs(positionMs),
