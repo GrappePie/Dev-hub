@@ -82,7 +82,7 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         if (!duration) return;
         const progress = Math.max(0, Math.min(100, ((targetMs + activeSource.offsetMs) / duration) * 100));
         if (activeSource.provider === "spotify") players.spotify.seekToProgress(progress);
-        if (activeSource.provider === "youtube") players.youtube.seekToProgress(progress);
+        if (activeSource.provider === "youtube") players.youtube.seekLocalToProgress(progress);
         if (activeSource.provider === "soundcloud") players.soundcloud.seekToProgress(progress);
     }, [getAdapterState]);
 
@@ -114,7 +114,7 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
             });
         }
         if (activeSource.provider === "youtube") {
-            players.youtube.playSearchTrack({
+            players.youtube.playLocalSearchTrack({
                 id: `mixy-${activeSource.id}`,
                 videoId: activeSource.id,
                 uri: activeSource.uri,
@@ -136,9 +136,21 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         }
     }, []);
 
-    const activateAudio = useCallback(() => {
+    const activateAudio = useCallback((forcePlay = false) => {
         if (!source || !mixy.room) return false;
-        if (!mixy.room.playback.isPlaying) return true;
+        if (!forcePlay && !mixy.room.playback.isPlaying) return true;
+        const players = adaptersRef.current;
+        if (source.provider === "youtube") {
+            players.youtube.unmute();
+            if (players.youtube.volume <= 0.01) players.youtube.setLocalVolumeLevel(0.65);
+            if (players.youtube.connect.isConnected && !players.youtube.connect.isActiveDevice) {
+                void players.youtube.connect.takeOver();
+            }
+        } else if (source.provider === "soundcloud") {
+            if (players.soundcloud.volume <= 0.01) players.soundcloud.setVolumeLevel(0.65);
+        } else if (source.provider === "spotify" && players.spotify.volume <= 0.01) {
+            void players.spotify.setVolumeLevel(0.65);
+        }
         const isSameTrack = source.provider === "spotify"
             ? adaptersRef.current.spotify.currentTrack?.id === source.id
             : source.provider === "youtube"
@@ -148,6 +160,25 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         setPlaying(source.provider, true);
         return true;
     }, [loadSource, mixy.room, setPlaying, source]);
+
+    const volume = activeProvider === "spotify"
+        ? spotify.volume
+        : activeProvider === "youtube"
+            ? youtube.volume
+            : activeProvider === "soundcloud"
+                ? soundcloud.volume
+                : 0.65;
+
+    const setVolume = useCallback((value: number) => {
+        const provider = playingProviderRef.current || source?.provider;
+        if (!provider) return;
+        const players = adaptersRef.current;
+        if (provider === "spotify") void players.spotify.setVolumeLevel(value);
+        else if (provider === "youtube") {
+            players.youtube.unmute();
+            players.youtube.setLocalVolumeLevel(value);
+        } else if (provider === "soundcloud") players.soundcloud.setVolumeLevel(value);
+    }, [source?.provider]);
 
     useEffect(() => {
         if (!enabled || !mixy.room || !mixy.ready || !mixy.activeTrack) {
@@ -229,10 +260,11 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         const remaining = playback.durationMs - extrapolateMixyPosition(playback, Date.now() + mixy.serverOffsetMs);
         if (remaining > 800) return;
         autoNextRevisionRef.current = playback.revision;
-        void mixy.control({ type: "next" });
+        const isLastTrack = playback.queueIndex >= mixy.room!.queue.length - 1;
+        void mixy.control({ type: isLastTrack ? "pause" : "next" });
     }, [enabled, mixy]);
 
-    return { providers, source, activeProvider, syncOffsetMs, message, activateAudio };
+    return { providers, source, activeProvider, syncOffsetMs, message, activateAudio, volume, setVolume };
 };
 
 export default useMixyPlayback;

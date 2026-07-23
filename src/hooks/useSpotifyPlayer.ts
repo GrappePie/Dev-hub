@@ -171,6 +171,7 @@ export interface SearchTrackItem {
     name: string;
     artist: string;
     image: string;
+    durationMs: number;
 }
 
 export interface SearchAlbumItem {
@@ -299,6 +300,7 @@ const mapSearchResults = (data: SpotifySearchResponse): SearchResults => ({
         name: track.name || "Sin título",
         artist: (track.artists || []).map((artist) => artist.name).join(", ") || "Sin artista",
         image: track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || fallbackAlbumArt,
+        durationMs: track.duration_ms || 0,
     })),
     albums: (data.albums?.items || []).map((album) => ({
         id: album.id,
@@ -839,7 +841,7 @@ export const useSpotifyPlayer = () => {
             const q = query.trim();
             if (!q) {
                 setSearchResults(EMPTY_SEARCH_RESULTS);
-                return;
+                return EMPTY_SEARCH_RESULTS;
             }
             setSearchLoading(true);
             try {
@@ -850,16 +852,36 @@ export const useSpotifyPlayer = () => {
                 );
                 if (!response.ok) {
                     setSearchResults(EMPTY_SEARCH_RESULTS);
-                    return;
+                    return EMPTY_SEARCH_RESULTS;
                 }
                 const data = (await response.json()) as SpotifySearchResponse;
-                setSearchResults(mapSearchResults(data));
+                const mapped = mapSearchResults(data);
+                setSearchResults(mapped);
+                return mapped;
             } finally {
                 setSearchLoading(false);
             }
         },
         [api]
     );
+
+    const fetchPlaylistTracks = useCallback(async (playlistId: string) => {
+        if (!playlistId) return [] as SearchTrackItem[];
+        const response = await api(`/playlists/${playlistId}/tracks?limit=50`, {}, { silent: true });
+        if (!response.ok) return [] as SearchTrackItem[];
+        const data = (await response.json()) as { items?: Array<{ track?: SpotifyTrackDetails | null }> };
+        return (data.items || [])
+            .map((entry) => entry.track)
+            .filter((track): track is SpotifyTrackDetails => Boolean(track?.id && track.uri))
+            .map((track) => ({
+                id: track.id,
+                uri: track.uri,
+                name: track.name || "Sin titulo",
+                artist: (track.artists || []).map((artist) => artist.name).join(", ") || "Sin artista",
+                image: track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || fallbackAlbumArt,
+                durationMs: track.duration_ms || 0,
+            }));
+    }, [api]);
 
     const clearSearchResults = useCallback(() => {
         setSearchResults(EMPTY_SEARCH_RESULTS);
@@ -1481,6 +1503,7 @@ export const useSpotifyPlayer = () => {
         logout,
         searchAndPlay,
         searchCatalog,
+        fetchPlaylistTracks,
         clearSearchResults,
         playSearchTrack,
         playPreviewForTrackId,

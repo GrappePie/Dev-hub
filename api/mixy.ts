@@ -212,6 +212,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
                     updatedAt: now,
                     revision: 1,
                 },
+                autoplay: true,
                 createdAt: now,
                 updatedAt: now,
             };
@@ -296,6 +297,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
                 if (control.type === "play-index") selectIndex(control.queueIndex);
                 else if (control.type === "next") selectIndex((playback.queueIndex + 1) % Math.max(1, next.queue.length));
                 else if (control.type === "previous") selectIndex(playback.queueIndex <= 0 ? next.queue.length - 1 : playback.queueIndex - 1);
+                else if (control.type === "set-autoplay") next.autoplay = control.enabled;
                 else if (control.type === "play") {
                     if (playback.queueIndex < 0 && next.queue.length) selectIndex(0);
                     else next.playback = { ...playback, isPlaying: true, effectiveAt: now + 900, updatedAt: now + 900, revision: playback.revision + 1 };

@@ -934,18 +934,18 @@ export const useSoundcloudPlayer = () => {
             const q = query.trim();
             if (!q) {
                 setSearchResults([]);
-                return;
+                return [] as SoundcloudPlaylist[];
             }
             if (!accessTokenRef.current) {
                 toast({ title: "SoundCloud", description: "Conecta tu cuenta para buscar tracks." });
-                return;
+                return [] as SoundcloudPlaylist[];
             }
             setSearchLoading(true);
             try {
                 const response = await scApi(`/tracks?q=${encodeURIComponent(q)}&limit=20&linked_partitioning=1`, {}, { silent: true });
                 if (!response.ok) {
                     setSearchResults([]);
-                    return;
+                    return [] as SoundcloudPlaylist[];
                 }
                 const raw = await response.json();
                 const collection = Array.isArray(raw) ? raw : Array.isArray(raw?.collection) ? raw.collection : [];
@@ -965,12 +965,30 @@ export const useSoundcloudPlayer = () => {
                 setSearchResults(mapped);
                 searchQueueRef.current = mapped;
                 searchQueueIndexRef.current = -1;
+                return mapped;
             } finally {
                 setSearchLoading(false);
             }
         },
         [scApi]
     );
+
+    const fetchPlaylistTracks = useCallback(async (playlistId: string) => {
+        const res = await scApi(`/playlists/${playlistId}`, {}, { silent: true });
+        if (!res.ok) return [] as SoundcloudPlaylist[];
+        const data = await res.json() as { tracks?: any[] };
+        return (data.tracks || [])
+            .filter((track: any) => track?.permalink_url)
+            .map((track: any) => ({
+                id: Number(track.id),
+                title: track.title || "Track",
+                permalink_url: track.permalink_url,
+                artwork_url: track.artwork_url || track?.user?.avatar_url || null,
+                kind: "track" as const,
+                artist: track.user?.username || "SoundCloud",
+                duration_ms: track.duration || 0,
+            }));
+    }, [scApi]);
 
     const playSearchTrack = useCallback(
         (item: SoundcloudPlaylist) => {
@@ -1309,6 +1327,7 @@ export const useSoundcloudPlayer = () => {
         loadMoreLibrarySection,
         clearSearchResults,
         searchCatalog,
+        fetchPlaylistTracks,
         searchAndPlay,
         playSearchTrack,
         loadTrack,

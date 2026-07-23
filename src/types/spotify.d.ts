@@ -131,6 +131,8 @@ interface YouTubePlayerOptions {
 interface YouTubePlayer {
     playVideo: () => void;
     pauseVideo: () => void;
+    unMute: () => void;
+    isMuted: () => boolean;
     loadVideoById: (videoId: string) => void;
     cueVideoById: (videoId: string) => void;
     getPlayerState: () => number;

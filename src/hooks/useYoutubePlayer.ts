@@ -1058,12 +1058,13 @@ export const useYoutubePlayer = () => {
             const q = query.trim();
             if (!q) {
                 setSearchResults([]);
-                return;
+                return [] as YouTubeTrack[];
             }
             setSearchLoading(true);
             try {
                 const tracks = await fetchSearch(q);
                 setSearchResults(tracks);
+                return tracks;
             } finally {
                 setSearchLoading(false);
             }
@@ -1199,11 +1200,16 @@ export const useYoutubePlayer = () => {
     }, []);
 
     const play = useCallback(() => {
+        playerRef.current?.unMute();
         playerRef.current?.playVideo();
     }, []);
 
     const pause = useCallback(() => {
         playerRef.current?.pauseVideo();
+    }, []);
+
+    const unmute = useCallback(() => {
+        playerRef.current?.unMute();
     }, []);
 
     useEffect(() => {
@@ -1629,8 +1635,10 @@ export const useYoutubePlayer = () => {
         playLibraryItem: remotePlayLibraryItem,
         clearSearchResults,
         searchCatalog,
+        fetchPlaylistTracks,
         searchAndPlay,
         playSearchTrack: remotePlaySearchTrack,
+        playLocalSearchTrack: playSearchTrack,
         addToQueue,
         queueCurrentNext,
         queueCurrentLast,
@@ -1640,12 +1648,15 @@ export const useYoutubePlayer = () => {
         togglePlayPause: remoteTogglePlayPause,
         play,
         pause,
+        unmute,
         nextTrack: remoteNextTrack,
         prevTrack: remotePrevTrack,
         cycleShuffle: remoteCycleShuffle,
         cycleRepeat: remoteCycleRepeat,
         seekToProgress: remoteSeek,
+        seekLocalToProgress: seekToProgress,
         setVolumeLevel: remoteVolume,
+        setLocalVolumeLevel: setVolumeLevel,
         rateCurrentTrack,
         shareCurrent,
         playQueueTrack: remotePlayQueueTrack,

@@ -52,6 +52,7 @@ export interface MixyRoom {
     participants: MixyParticipant[];
     queue: MixyTrack[];
     playback: MixyPlayback;
+    autoplay?: boolean;
     createdAt: number;
     updatedAt: number;
 }
@@ -65,10 +66,20 @@ export interface MixySearchCandidate extends MixySource {
     available: boolean;
 }
 
+export interface MixyLibraryPlaylist {
+    provider: Exclude<MixyProvider, "local">;
+    id: string;
+    title: string;
+    subtitle: string;
+    image: string;
+    trackCount: number;
+}
+
 export type MixyControl =
     | { type: "play" | "pause" | "next" | "previous" }
     | { type: "seek"; positionMs: number }
-    | { type: "play-index"; queueIndex: number };
+    | { type: "play-index"; queueIndex: number }
+    | { type: "set-autoplay"; enabled: boolean };
 
 export interface MixyApiError {
     error: string;

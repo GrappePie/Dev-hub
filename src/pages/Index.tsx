@@ -30,7 +30,13 @@ import {
 } from "@/lib/platformTheme";
 import ArtistDialog from "@/components/ArtistDialog";
 import type { ArtistData, ArtistTopTrack } from "@/hooks/useSpotifyPlayer";
-import type { MixyProvider, MixySearchCandidate } from "@/lib/mixy";
+import {
+    buildFederatedMixyTrack,
+    extrapolateMixyPosition,
+    type MixyLibraryPlaylist,
+    type MixyProvider,
+    type MixySearchCandidate,
+} from "@/lib/mixy";
 
 const Index = () => {
     const spotify = useSpotifyPlayer();
@@ -62,6 +68,7 @@ const Index = () => {
     const [mixyMode, setMixyMode] = useState(false);
     const [mixyActiveProvider, setMixyActiveProvider] = useState<MixyProvider | null>(null);
     const [mixySyncOffset, setMixySyncOffset] = useState<number | null>(null);
+    const mixyAutoplayRevisionRef = useRef(-1);
     const [pendingModeActivation, setPendingModeActivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [pendingModeDeactivation, setPendingModeDeactivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [soundcloudLibrarySection, setSoundcloudLibrarySection] = useState<SoundcloudLibrarySection>("playlists");
@@ -501,7 +508,7 @@ const Index = () => {
         ...spotify.searchResults.tracks.map((track) => ({
             provider: "spotify" as const, id: track.id, uri: track.uri,
             title: track.name, artist: track.artist, image: track.image,
-            durationMs: 0, offsetMs: 0, available: spotify.isAuthenticated,
+            durationMs: track.durationMs, offsetMs: 0, available: spotify.isAuthenticated,
         })),
         ...youtube.searchResults.map((track) => ({
             provider: "youtube" as const, id: track.videoId, uri: track.uri,
@@ -515,13 +522,125 @@ const Index = () => {
         })),
     ], [soundcloud.sdkReady, soundcloud.searchResults, spotify.isAuthenticated, spotify.searchResults.tracks, youtube.isReady, youtube.searchResults]);
 
-    const handleMixySearch = useCallback(async (query: string) => {
-        await Promise.all([
+    const searchMixyProviders = useCallback(async (query: string) => {
+        const [youtubeTracks, spotifyResults, soundcloudTracks] = await Promise.all([
             youtube.searchCatalog(query),
-            spotify.isAuthenticated ? spotify.searchCatalog(query) : Promise.resolve(),
-            soundcloud.isAuthenticated ? soundcloud.searchCatalog(query) : Promise.resolve(),
+            spotify.isAuthenticated ? spotify.searchCatalog(query) : Promise.resolve({ tracks: [], albums: [], artists: [] }),
+            soundcloud.isAuthenticated ? soundcloud.searchCatalog(query) : Promise.resolve([]),
         ]);
+        return [
+            ...(spotifyResults?.tracks || []).map((track) => ({
+                provider: "spotify" as const, id: track.id, uri: track.uri,
+                title: track.name, artist: track.artist, image: track.image,
+                durationMs: track.durationMs, offsetMs: 0, available: true,
+            })),
+            ...(youtubeTracks || []).map((track) => ({
+                provider: "youtube" as const, id: track.videoId, uri: track.uri,
+                title: track.title, artist: track.artist, image: track.image,
+                durationMs: track.durationMs, offsetMs: 0, available: youtube.isReady,
+            })),
+            ...(soundcloudTracks || []).map((track) => ({
+                provider: "soundcloud" as const, id: String(track.id), uri: track.permalink_url,
+                title: track.title, artist: track.artist || "SoundCloud", image: track.artwork_url || "",
+                durationMs: track.duration_ms || 0, offsetMs: 0, available: soundcloud.sdkReady,
+            })),
+        ] satisfies MixySearchCandidate[];
     }, [soundcloud.isAuthenticated, soundcloud.searchCatalog, spotify.isAuthenticated, spotify.searchCatalog, youtube.searchCatalog]);
+
+    const handleMixySearch = useCallback(async (query: string) => {
+        await searchMixyProviders(query);
+    }, [searchMixyProviders]);
+
+    const handleMixyAddCandidate = useCallback(async (candidate: MixySearchCandidate) => {
+        const alternatives = await searchMixyProviders(`${candidate.title} ${candidate.artist}`);
+        const seed = alternatives.find((item) => item.provider === candidate.provider && item.id === candidate.id) || candidate;
+        const track = buildFederatedMixyTrack(seed, [candidate, ...alternatives], mixy.deviceId, mixy.participantName);
+        await mixy.addTrack(track);
+    }, [mixy, searchMixyProviders]);
+
+    const mixyPlaylists = useMemo<MixyLibraryPlaylist[]>(() => [
+        ...spotify.playlists.map((playlist) => ({
+            provider: "spotify" as const, id: playlist.id, title: playlist.name,
+            subtitle: playlist.owner, image: playlist.image, trackCount: playlist.tracksTotal,
+        })),
+        ...youtube.libraryBySection.playlists
+            .filter((item) => item.kind === "playlist")
+            .map((playlist) => ({
+                provider: "youtube" as const, id: playlist.playlistId, title: playlist.title,
+                subtitle: playlist.artist, image: playlist.image, trackCount: playlist.trackCount,
+            })),
+        ...soundcloud.libraryBySection.playlists.map((playlist) => ({
+            provider: "soundcloud" as const, id: String(playlist.id), title: playlist.title,
+            subtitle: playlist.artist || soundcloud.accountName || "SoundCloud",
+            image: playlist.artwork_url || "", trackCount: playlist.track_count || 0,
+        })),
+    ], [soundcloud.accountName, soundcloud.libraryBySection.playlists, spotify.playlists, youtube.libraryBySection.playlists]);
+
+    const handleMixyLoadPlaylist = useCallback(async (playlist: MixyLibraryPlaylist) => {
+        if (playlist.provider === "spotify") {
+            const tracks = await spotify.fetchPlaylistTracks(playlist.id);
+            return tracks.map((track) => ({
+                provider: "spotify" as const, id: track.id, uri: track.uri, title: track.name,
+                artist: track.artist, image: track.image, durationMs: track.durationMs,
+                offsetMs: 0, available: true,
+            }));
+        }
+        if (playlist.provider === "youtube") {
+            const tracks = await youtube.fetchPlaylistTracks(playlist.id);
+            return tracks.map((track) => ({
+                provider: "youtube" as const, id: track.videoId, uri: track.uri, title: track.title,
+                artist: track.artist, image: track.image, durationMs: track.durationMs,
+                offsetMs: 0, available: youtube.isReady,
+            }));
+        }
+        const tracks = await soundcloud.fetchPlaylistTracks(playlist.id);
+        return tracks.map((track) => ({
+            provider: "soundcloud" as const, id: String(track.id), uri: track.permalink_url,
+            title: track.title, artist: track.artist || "SoundCloud", image: track.artwork_url || "",
+            durationMs: track.duration_ms || 0, offsetMs: 0, available: soundcloud.sdkReady,
+        }));
+    }, [soundcloud, spotify, youtube]);
+
+    const handleMixyAutoplay = useCallback(async () => {
+        const activeTrack = mixy.activeTrack;
+        if (!activeTrack || !mixy.room) return false;
+        const queuedSources = new Set(
+            mixy.room.queue.flatMap((track) => Object.values(track.sources).map((source) => `${source.provider}:${source.id}`)),
+        );
+        const normalizeTitle = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        let candidates = await searchMixyProviders(`${activeTrack.artist} music`);
+        let seed = candidates.find((candidate) =>
+            !queuedSources.has(`${candidate.provider}:${candidate.id}`) &&
+            normalizeTitle(candidate.title) !== normalizeTitle(activeTrack.title),
+        );
+        if (!seed) {
+            candidates = await searchMixyProviders(`${activeTrack.artist} similar artists`);
+            seed = candidates.find((candidate) => !queuedSources.has(`${candidate.provider}:${candidate.id}`));
+        }
+        if (!seed) return false;
+        const nextTrack = buildFederatedMixyTrack(seed, candidates, mixy.deviceId, "Mixy Auto DJ");
+        return Boolean(await mixy.addTrack(nextTrack));
+    }, [mixy, searchMixyProviders]);
+
+    useEffect(() => {
+        const room = mixy.room;
+        const playback = room?.playback;
+        if (!isMixyMode || !mixy.isHost || room?.autoplay === false || !playback?.isPlaying || !mixy.activeTrack) return;
+        if (playback.queueIndex !== room.queue.length - 1 || !playback.durationMs) return;
+        const remaining = playback.durationMs - extrapolateMixyPosition(playback, Date.now() + mixy.serverOffsetMs);
+        if (remaining > 15_000 || mixyAutoplayRevisionRef.current === playback.revision) return;
+        mixyAutoplayRevisionRef.current = playback.revision;
+        void handleMixyAutoplay();
+    }, [handleMixyAutoplay, isMixyMode, mixy.activeTrack, mixy.isHost, mixy.room, mixy.serverOffsetMs]);
+
+    useEffect(() => {
+        if (!isMixyMode) return;
+        if (spotify.isAuthenticated) void spotify.ensureLibraryLoaded();
+        if (youtube.isAuthenticated) void youtube.fetchLibrary();
+        if (soundcloud.isAuthenticated) void soundcloud.fetchLibrary();
+        // Libraries refresh once when Mixy opens; each source owns its pagination afterwards.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isMixyMode]);
 
     const queueById = useMemo(() => {
         const map = new Map<string, (typeof spotify.queue)[number]>();
@@ -951,6 +1070,11 @@ const Index = () => {
                             soundcloudIframeRef={soundcloud.iframeRef}
                             soundcloudIframeSrc={soundcloud.iframeSrc}
                             onActivateAudio={mixyPlayback.activateAudio}
+                            volume={mixyPlayback.volume}
+                            onVolumeChange={mixyPlayback.setVolume}
+                            playlists={mixyPlaylists}
+                            onLoadPlaylist={handleMixyLoadPlaylist}
+                            onAddCandidate={handleMixyAddCandidate}
                         />
                     ) : isLoggedIn ? (
                         <PlayerScreen
