@@ -200,8 +200,10 @@ export const useMixyRoom = ({ providers, activeProvider, syncOffsetMs }: UseMixy
                 applyResponse(response, startedAt);
                 rememberRoom(storedCode, response.room);
                 setJoinCodeState(formatMixyCode(storedCode));
-                const participant = response.room.participants.find((entry) => entry.id === deviceId);
-                setReadyState(participant?.ready === true);
+                // Browser autoplay permission is scoped to the current page lifetime.
+                // A restored room must require a fresh user gesture before claiming audio is ready.
+                setReadyState(false);
+                statusRef.current = { ...statusRef.current, ready: false };
             })
             .catch(() => {
                 if (!cancelled) rememberRoom("", null);
