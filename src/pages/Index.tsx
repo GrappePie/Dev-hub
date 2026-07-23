@@ -5,6 +5,7 @@ import PlayerScreen from "@/components/PlayerScreen";
 import SoundcloudScreen from "@/components/SoundcloudScreen";
 import YoutubeMusicScreen from "@/components/YoutubeMusicScreen";
 import FileaScreen from "@/components/FileaScreen";
+import MixyScreen from "@/components/MixyScreen";
 import PixelTransition from "@/components/PixelTransition";
 import ReactiveBackground, { type ReactiveBackgroundVariant } from "@/components/ReactiveBackground";
 import useSpotifyPlayer from "@/hooks/useSpotifyPlayer";
@@ -55,6 +56,7 @@ const Index = () => {
     const [soundcloudMode, setSoundcloudMode] = useState(false);
     const [youtubeMode, setYoutubeMode] = useState(false);
     const [fileaMode, setFileaMode] = useState(false);
+    const [mixyMode, setMixyMode] = useState(false);
     const [pendingModeActivation, setPendingModeActivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [pendingModeDeactivation, setPendingModeDeactivation] = useState<"soundcloud" | "youtube" | null>(null);
     const [soundcloudLibrarySection, setSoundcloudLibrarySection] = useState<SoundcloudLibrarySection>("playlists");
@@ -74,7 +76,8 @@ const Index = () => {
     const isSoundcloudMode = selectedPlatform === "soundcloud" && soundcloudMode;
     const isYouTubeMode = selectedPlatform === "youtube" && youtubeMode;
     const isFileaMode = selectedPlatform === "filea" && fileaMode;
-    const isSessionActive = isLoggedIn || isSoundcloudMode || isYouTubeMode || isFileaMode;
+    const isMixyMode = selectedPlatform === "mixy" && mixyMode;
+    const isSessionActive = isLoggedIn || isSoundcloudMode || isYouTubeMode || isFileaMode || isMixyMode;
     const showOAuthBridge = !isLoggedIn && oauthReturnDetected && spotify.isAuthLoading;
     const lastAuthFeedbackIdRef = useRef<number | null>(null);
     const youtubeVolumeBeforeMuteRef = useRef(0.5);
@@ -187,6 +190,7 @@ const Index = () => {
             youtube.reset();
             setSoundcloudMode(true);
             setYoutubeMode(false);
+            setMixyMode(false);
             setLibraryOpen(false);
             setIsAuthRedirecting(false);
             setShowCharacterSelect(false);
@@ -202,6 +206,7 @@ const Index = () => {
             soundcloud.reset();
             setSoundcloudMode(false);
             setYoutubeMode(true);
+            setMixyMode(false);
             setLibraryOpen(false);
             setIsAuthRedirecting(false);
             setShowCharacterSelect(false);
@@ -245,6 +250,14 @@ const Index = () => {
             setShowCharacterSelect(true);
             return;
         }
+        if (isMixyMode) {
+            setMixyMode(false);
+            setPendingModeActivation(null);
+            setPendingModeDeactivation(null);
+            setIsAuthRedirecting(false);
+            setShowCharacterSelect(true);
+            return;
+        }
         if (isSoundcloudMode) {
             setPendingModeActivation(null);
             setPendingModeDeactivation("soundcloud");
@@ -265,6 +278,7 @@ const Index = () => {
             setSoundcloudMode(false);
             setYoutubeMode(false);
             setFileaMode(false);
+            setMixyMode(false);
             setPendingModeActivation(null);
             setPendingModeDeactivation(null);
             setIsAuthRedirecting(false);
@@ -276,10 +290,11 @@ const Index = () => {
         setSoundcloudMode(false);
         setYoutubeMode(false);
         setFileaMode(false);
+        setMixyMode(false);
         setPendingModeActivation(null);
         setPendingModeDeactivation(null);
         setShowCharacterSelect(true);
-    }, [isFileaMode, isSoundcloudMode, isYouTubeMode, spotify.clearSearchResults, spotify.isAuthenticated, spotify.logout]);
+    }, [isFileaMode, isMixyMode, isSoundcloudMode, isYouTubeMode, spotify.clearSearchResults, spotify.isAuthenticated, spotify.logout]);
 
     const onPlatformSelect = useCallback(
         (platform: PlatformId) => {
@@ -287,16 +302,46 @@ const Index = () => {
             setPreviewPlatform(platform);
             if (platform !== "spotify") {
                 if (platform === "soundcloud") {
+                    if (isMixyMode) {
+                        youtube.reset();
+                        setPendingModeActivation(null);
+                        setPendingModeDeactivation(null);
+                        setSoundcloudMode(true);
+                        setYoutubeMode(false);
+                        setFileaMode(false);
+                        setMixyMode(false);
+                        setLibraryOpen(false);
+                        setDevicesOpen(false);
+                        setSearchQuery("");
+                        toast({ title: "CLOUDY ONLINE", description: "SoundCloud esta listo para conectar." });
+                        return;
+                    }
                     setPendingModeDeactivation(null);
                     setPendingModeActivation("soundcloud");
                     setFileaMode(false);
+                    setMixyMode(false);
                     setShowCharacterSelect(false);
                     return;
                 }
                 if (platform === "youtube") {
+                    if (isMixyMode) {
+                        soundcloud.reset();
+                        setPendingModeActivation(null);
+                        setPendingModeDeactivation(null);
+                        setSoundcloudMode(false);
+                        setYoutubeMode(true);
+                        setFileaMode(false);
+                        setMixyMode(false);
+                        setLibraryOpen(false);
+                        setDevicesOpen(false);
+                        setSearchQuery("");
+                        toast({ title: "TUBY ONLINE", description: "YouTube Music esta listo." });
+                        return;
+                    }
                     setPendingModeDeactivation(null);
                     setPendingModeActivation("youtube");
                     setFileaMode(false);
+                    setMixyMode(false);
                     setShowCharacterSelect(false);
                     return;
                 }
@@ -309,11 +354,30 @@ const Index = () => {
                     setSoundcloudMode(false);
                     setYoutubeMode(false);
                     setFileaMode(true);
+                    setMixyMode(false);
                     setIsAuthRedirecting(false);
                     setShowCharacterSelect(false);
                     toast({
                         title: "FILEA READY",
                         description: "La idol pixel esta activa en el selector.",
+                    });
+                    return;
+                }
+                if (platform === "mixy") {
+                    sfx("coin");
+                    setPendingModeActivation(null);
+                    setPendingModeDeactivation(null);
+                    soundcloud.reset();
+                    youtube.reset();
+                    setSoundcloudMode(false);
+                    setYoutubeMode(false);
+                    setFileaMode(false);
+                    setMixyMode(true);
+                    setIsAuthRedirecting(false);
+                    setShowCharacterSelect(false);
+                    toast({
+                        title: "MIXY ONLINE",
+                        description: "La central de mezcla esta lista.",
                     });
                     return;
                 }
@@ -326,6 +390,7 @@ const Index = () => {
             setSoundcloudMode(false);
             setYoutubeMode(false);
             setFileaMode(false);
+            setMixyMode(false);
             setIsAuthRedirecting(true);
             setShowCharacterSelect(true);
             void spotify.startLogin().catch(() => {
@@ -337,7 +402,7 @@ const Index = () => {
                 });
             });
         },
-        [sfx, soundcloud.reset, spotify.startLogin, youtube.reset]
+        [isMixyMode, sfx, soundcloud.reset, spotify.startLogin, youtube.reset]
     );
 
     const onLibraryToggle = useCallback(() => {
@@ -963,6 +1028,8 @@ const Index = () => {
                         />
                     ) : isFileaMode ? (
                         <FileaScreen />
+                    ) : isMixyMode ? (
+                        <MixyScreen onChoosePlatform={onPlatformSelect} />
                     ) : (
                         <>
                             {showOAuthBridge ? (

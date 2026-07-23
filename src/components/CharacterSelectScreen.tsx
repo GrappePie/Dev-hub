@@ -5,8 +5,10 @@ import idolSpotify from "@/assets/idol-spotify.png";
 import idolYoutube from "@/assets/idol-youtube.png";
 import idolSoundcloud from "@/assets/idol-soundcloud.png";
 import idolFilea from "@/assets/idol-Filea.gif";
+import idolMixy from "@/assets/idol-mixy.png";
+import idolMixyVideo from "@/assets/idol-mixy-body.mp4";
 
-export type PlatformId = "spotify" | "youtube" | "soundcloud" | "filea";
+export type PlatformId = "spotify" | "youtube" | "soundcloud" | "filea" | "mixy";
 
 interface CharacterSelectScreenProps {
     onSelect: (platform: PlatformId) => void;
@@ -21,6 +23,7 @@ interface CharacterOption {
     platform: string;
     desc: string;
     sprite: string;
+    video?: string;
     overpowered?: boolean;
     powerLevel: 4 | 5;
     colors: { primary: string; secondary: string; accent: string };
@@ -64,16 +67,30 @@ const characters: CharacterOption[] = [
         powerLevel: 5,
         colors: { primary: "0 0% 96%", secondary: "0 0% 66%", accent: "0 0% 12%" },
     },
+    {
+        id: "mixy",
+        name: "MIXY",
+        platform: "MIX HUB",
+        desc: "La DJ que une todos tus mundos musicales.",
+        sprite: idolMixy,
+        video: idolMixyVideo,
+        powerLevel: 5,
+        colors: { primary: "326 88% 62%", secondary: "190 92% 48%", accent: "240 30% 7%" },
+    },
 ];
 
 const IdolSprite = ({
     sprite,
+    video,
+    alt,
     frame,
     selected,
     primaryColor,
     overpowered = false,
 }: {
     sprite: string;
+    video?: string;
+    alt: string;
     frame: number;
     selected: boolean;
     primaryColor: string;
@@ -96,21 +113,42 @@ const IdolSprite = ({
                 transition: "transform 0.1s ease-out",
             }}
         >
-            <img
-                src={sprite}
-                alt="Idol"
-                className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
-                style={{
-                    imageRendering: "pixelated",
-                    transform: `scaleY(${breathScale}) rotate(${sway}deg)`,
-                    filter: selected
-                        ? overpowered
-                            ? `drop-shadow(0 0 ${8 + powerPulse * 8}px hsl(0 0% 100% / 0.85)) drop-shadow(0 0 ${16 + powerPulse * 10}px hsl(190 100% 80% / 0.55)) drop-shadow(0 4px 6px hsl(0 0% 0% / 0.45))`
-                            : `drop-shadow(0 0 8px hsl(${primaryColor} / 0.6)) drop-shadow(0 4px 6px hsl(0 0% 0% / 0.4))`
-                        : "drop-shadow(0 2px 4px hsl(0 0% 0% / 0.3))",
-                    transition: "filter 0.3s ease",
-                }}
-            />
+            {video ? (
+                <video
+                    src={video}
+                    poster={sprite}
+                    aria-label={alt}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
+                    style={{
+                        imageRendering: "pixelated",
+                        filter: selected
+                            ? `drop-shadow(0 0 8px hsl(${primaryColor} / 0.6)) drop-shadow(0 4px 6px hsl(0 0% 0% / 0.4))`
+                            : "drop-shadow(0 2px 4px hsl(0 0% 0% / 0.3))",
+                        transition: "filter 0.3s ease",
+                    }}
+                />
+            ) : (
+                <img
+                    src={sprite}
+                    alt={alt}
+                    className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
+                    style={{
+                        imageRendering: "pixelated",
+                        transform: `scaleY(${breathScale}) rotate(${sway}deg)`,
+                        filter: selected
+                            ? overpowered
+                                ? `drop-shadow(0 0 ${8 + powerPulse * 8}px hsl(0 0% 100% / 0.85)) drop-shadow(0 0 ${16 + powerPulse * 10}px hsl(190 100% 80% / 0.55)) drop-shadow(0 4px 6px hsl(0 0% 0% / 0.45))`
+                                : `drop-shadow(0 0 8px hsl(${primaryColor} / 0.6)) drop-shadow(0 4px 6px hsl(0 0% 0% / 0.4))`
+                            : "drop-shadow(0 2px 4px hsl(0 0% 0% / 0.3))",
+                        transition: "filter 0.3s ease",
+                    }}
+                />
+            )}
             {selected && (
                 <div
                     className="absolute inset-0 rounded-full pointer-events-none"
@@ -188,7 +226,7 @@ const CharacterSelectScreen = ({ onSelect, onBack, initialPlatform = "spotify", 
 
     const playSelectionSfx = useCallback(
         (platform: PlatformId) => {
-            sfx(platform === "filea" ? "ultimate" : "select");
+            sfx(platform === "filea" || platform === "mixy" ? "ultimate" : "select");
         },
         [sfx]
     );
@@ -336,6 +374,8 @@ const CharacterSelectScreen = ({ onSelect, onBack, initialPlatform = "spotify", 
                             <div className="mb-4" style={{ minHeight: 128 }}>
                                 <IdolSprite
                                     sprite={character.sprite}
+                                    video={character.video}
+                                    alt={`${character.name}, ${character.platform}`}
                                     frame={isSelected ? frame : 0}
                                     selected={isSelected}
                                     primaryColor={character.colors.primary}
