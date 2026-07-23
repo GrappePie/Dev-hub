@@ -31,6 +31,7 @@ interface MixyScreenProps {
     youtubePlayerHostRef: (node: HTMLDivElement | null) => void;
     soundcloudIframeRef: RefObject<HTMLIFrameElement>;
     soundcloudIframeSrc: string;
+    onActivateAudio: () => boolean;
 }
 
 const PROVIDER_META: Record<MixyProvider, { label: string; color: string }> = {
@@ -59,6 +60,7 @@ const MixyScreen = ({
     spotifyConnected, youtubeConnected, soundcloudConnected,
     onConnectSpotify, onConnectYoutube, onConnectSoundcloud,
     youtubePlayerHostRef, soundcloudIframeRef, soundcloudIframeSrc,
+    onActivateAudio,
 }: MixyScreenProps) => {
     const [query, setQuery] = useState("");
     const [clock, setClock] = useState(Date.now());
@@ -134,7 +136,10 @@ const MixyScreen = ({
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => void mixy.copyCode()} className="flex items-center gap-2 border border-border px-3 py-2 font-display text-[7px]"><Clipboard size={13} /> COPIAR</button>
-                    <button type="button" onClick={() => mixy.setReady(!mixy.ready)} className={`flex items-center gap-2 border px-3 py-2 font-display text-[7px] ${mixy.ready ? "border-emerald-400 text-emerald-400" : "border-primary text-primary"}`}>
+                    <button type="button" onClick={() => {
+                        if (!mixy.ready) onActivateAudio();
+                        mixy.setReady(!mixy.ready);
+                    }} className={`flex items-center gap-2 border px-3 py-2 font-display text-[7px] ${mixy.ready ? "border-emerald-400 text-emerald-400" : "border-primary text-primary"}`}>
                         {mixy.ready ? <Check size={13} /> : <Wifi size={13} />} {mixy.ready ? "AUDIO READY" : "ACTIVAR AUDIO"}
                     </button>
                     <button type="button" onClick={mixy.disconnect} className="flex items-center gap-2 border border-destructive/70 px-3 py-2 font-display text-[7px] text-destructive"><LogOut size={13} /> SALIR</button>
@@ -197,7 +202,10 @@ const MixyScreen = ({
                                 <p className="mt-1 truncate text-sm text-muted-foreground">{mixy.activeTrack?.artist || "Busca una cancion para comenzar"}</p>
                                 <div className="mt-5 flex items-center justify-center gap-3 sm:justify-start">
                                     <button type="button" onClick={() => void mixy.control({ type: "previous" })} className="border border-border p-2" aria-label="Anterior"><SkipBack size={17} /></button>
-                                    <button type="button" onClick={() => void mixy.control({ type: mixy.room!.playback.isPlaying ? "pause" : "play" })} disabled={!mixy.activeTrack} className="border border-primary bg-primary p-3 text-primary-foreground disabled:opacity-40" aria-label={mixy.room.playback.isPlaying ? "Pausar" : "Reproducir"}>{mixy.room.playback.isPlaying ? <Pause size={20} /> : <Play size={20} />}</button>
+                                    <button type="button" onClick={() => {
+                                        if (!mixy.room!.playback.isPlaying) onActivateAudio();
+                                        void mixy.control({ type: mixy.room!.playback.isPlaying ? "pause" : "play" });
+                                    }} disabled={!mixy.activeTrack} className="border border-primary bg-primary p-3 text-primary-foreground disabled:opacity-40" aria-label={mixy.room.playback.isPlaying ? "Pausar" : "Reproducir"}>{mixy.room.playback.isPlaying ? <Pause size={20} /> : <Play size={20} />}</button>
                                     <button type="button" onClick={() => void mixy.control({ type: "next" })} className="border border-border p-2" aria-label="Siguiente"><SkipForward size={17} /></button>
                                 </div>
                             </div>

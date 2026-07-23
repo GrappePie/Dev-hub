@@ -950,6 +950,7 @@ const Index = () => {
                             youtubePlayerHostRef={youtube.playerHostRef}
                             soundcloudIframeRef={soundcloud.iframeRef}
                             soundcloudIframeSrc={soundcloud.iframeSrc}
+                            onActivateAudio={mixyPlayback.activateAudio}
                         />
                     ) : isLoggedIn ? (
                         <PlayerScreen

@@ -1198,6 +1198,14 @@ export const useYoutubePlayer = () => {
         if (player) player.setVolume(Math.round(next * 100));
     }, []);
 
+    const play = useCallback(() => {
+        playerRef.current?.playVideo();
+    }, []);
+
+    const pause = useCallback(() => {
+        playerRef.current?.pauseVideo();
+    }, []);
+
     useEffect(() => {
         let active = true;
         setCurrentRating("none");
@@ -1630,6 +1638,8 @@ export const useYoutubePlayer = () => {
         startMixFromCurrent,
         saveCurrentToPlaylist,
         togglePlayPause: remoteTogglePlayPause,
+        play,
+        pause,
         nextTrack: remoteNextTrack,
         prevTrack: remotePrevTrack,
         cycleShuffle: remoteCycleShuffle,

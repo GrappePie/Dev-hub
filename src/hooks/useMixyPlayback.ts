@@ -88,10 +88,17 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
     const setPlaying = useCallback((provider: MixyProvider, desired: boolean) => {
         const players = adaptersRef.current;
         const state = getAdapterState(provider);
-        if (state.isPlaying === desired) return;
-        if (provider === "spotify") void players.spotify.togglePlayPause();
-        if (provider === "youtube") players.youtube.togglePlayPause();
-        if (provider === "soundcloud") players.soundcloud.togglePlayPause();
+        if (provider === "youtube") {
+            if (desired) players.youtube.play();
+            else players.youtube.pause();
+            return;
+        }
+        if (provider === "soundcloud") {
+            if (desired) players.soundcloud.play();
+            else players.soundcloud.pause();
+            return;
+        }
+        if (state.isPlaying !== desired) void players.spotify.togglePlayPause();
     }, [getAdapterState]);
 
     const loadSource = useCallback((activeSource: MixySource) => {
@@ -127,6 +134,18 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
             });
         }
     }, []);
+
+    const activateAudio = useCallback(() => {
+        if (!source || !mixy.room) return false;
+        const isSameTrack = source.provider === "spotify"
+            ? adaptersRef.current.spotify.currentTrack?.id === source.id
+            : source.provider === "youtube"
+                ? adaptersRef.current.youtube.currentTrack?.videoId === source.id
+                : String(adaptersRef.current.soundcloud.currentTrack?.id) === String(source.id);
+        if (!isSameTrack) loadSource(source);
+        if (mixy.room.playback.isPlaying) setPlaying(source.provider, true);
+        return true;
+    }, [loadSource, mixy.room, setPlaying, source]);
 
     useEffect(() => {
         if (!enabled || !mixy.room || !mixy.ready || !mixy.activeTrack) {
@@ -203,7 +222,7 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
         void mixy.control({ type: "next" });
     }, [enabled, mixy]);
 
-    return { providers, source, activeProvider, syncOffsetMs, message };
+    return { providers, source, activeProvider, syncOffsetMs, message, activateAudio };
 };
 
 export default useMixyPlayback;

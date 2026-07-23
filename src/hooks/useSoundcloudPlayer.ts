@@ -239,6 +239,9 @@ export const useSoundcloudPlayer = () => {
     const scApiRef = useRef<((path: string, init?: RequestInit, opts?: { silent?: boolean; includeClientId?: boolean }) => Promise<Response>) | null>(null);
     const currentScTrackIdRef = useRef<number | null>(null);
     const volumeRef = useRef(0.5);
+    const loadedUrlRef = useRef(DEFAULT_TRACK_URL);
+    const durationMsRef = useRef(0);
+    const pendingAutoPlayRef = useRef(false);
     const [shuffleMode, setShuffleMode] = useState<"off" | "shuffle" | "smart">("off");
     const [expandedPlaylist, setExpandedPlaylist] = useState<{ id: number; title: string; tracks: SoundcloudPlaylist[] } | null>(null);
     const [expandedPlaylistLoading, setExpandedPlaylistLoading] = useState(false);
@@ -253,6 +256,9 @@ export const useSoundcloudPlayer = () => {
     const [positionMs, setPositionMs] = useState(0);
     const [currentTrack, setCurrentTrack] = useState<CurrentTrack | null>(null);
     const [loadedUrl, setLoadedUrl] = useState(DEFAULT_TRACK_URL);
+
+    loadedUrlRef.current = loadedUrl;
+    durationMsRef.current = durationMs;
 
     useEffect(() => {
         accessTokenRef.current = accessToken;
@@ -637,18 +643,18 @@ export const useSoundcloudPlayer = () => {
             }
             setCurrentTrack({
                 id: String(sound.id || sound.permalink_url || Date.now()),
-                uri: sound.permalink_url || loadedUrl,
+                uri: sound.permalink_url || loadedUrlRef.current,
                 title: sound.title || "SoundCloud Track",
                 artist: sound.user?.username || "SoundCloud",
                 artistNames: [sound.user?.username || "SoundCloud"],
-                durationMs: sound.duration || durationMs,
-                duration: formatMs(sound.duration || durationMs),
+                durationMs: sound.duration || durationMsRef.current,
+                duration: formatMs(sound.duration || durationMsRef.current),
                 albumArt: upscaleArtwork(sound.artwork_url || sound.user?.avatar_url),
-                externalUrl: sound.permalink_url || loadedUrl,
+                externalUrl: sound.permalink_url || loadedUrlRef.current,
                 artistId: sound.user?.id ? String(sound.user.id) : undefined,
             });
         });
-    }, [durationMs, loadedUrl]);
+    }, []);
 
     const pushRecent = useCallback((item: SoundcloudPlaylist) => {
         if (!item.permalink_url) return;
@@ -688,8 +694,10 @@ export const useSoundcloudPlayer = () => {
             widget.getDuration((value) => setDurationMs(value || 0));
             widget.getPosition((value) => setPositionMs(value || 0));
             syncCurrentTrack();
+            if (pendingAutoPlayRef.current) widget.play();
         };
         const onPlay = () => {
+            pendingAutoPlayRef.current = false;
             setIsPlaying(true);
             setStatusText("Reproduciendo en SoundCloud.");
             syncCurrentTrack();
@@ -799,11 +807,25 @@ export const useSoundcloudPlayer = () => {
         }
         setInputUrl(normalized);
         setLoadedUrl(normalized);
-        setIsPlaying(autoPlay);
+        pendingAutoPlayRef.current = autoPlay;
+        setIsPlaying(false);
         setPositionMs(0);
         setDurationMs(0);
         setStatusText("Cargando track de SoundCloud...");
-        setIframeSrc(buildWidgetSrc(normalized, autoPlay));
+        const widget = widgetRef.current;
+        if (widget) {
+            widget.load(normalized, {
+                auto_play: autoPlay,
+                hide_related: true,
+                show_comments: false,
+                show_user: true,
+                show_reposts: false,
+                visual: true,
+            });
+            if (autoPlay) widget.play();
+        } else {
+            setIframeSrc(buildWidgetSrc(normalized, autoPlay));
+        }
         if (meta?.title) {
             if (meta.id) {
                 const numId = Number(meta.id);
@@ -1000,6 +1022,16 @@ export const useSoundcloudPlayer = () => {
 
     const togglePlayPause = useCallback(() => {
         widgetRef.current?.toggle();
+    }, []);
+
+    const play = useCallback(() => {
+        pendingAutoPlayRef.current = true;
+        widgetRef.current?.play();
+    }, []);
+
+    const pause = useCallback(() => {
+        pendingAutoPlayRef.current = false;
+        widgetRef.current?.pause();
     }, []);
 
     const nextTrack = useCallback(() => {
@@ -1284,6 +1316,8 @@ export const useSoundcloudPlayer = () => {
         playPlaylist,
         playFromList,
         togglePlayPause,
+        play,
+        pause,
         nextTrack,
         prevTrack,
         seekToProgress,
