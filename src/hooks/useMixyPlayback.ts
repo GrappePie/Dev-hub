@@ -137,13 +137,14 @@ export const useMixyPlayback = ({ enabled, mixy, spotify, youtube, soundcloud }:
 
     const activateAudio = useCallback(() => {
         if (!source || !mixy.room) return false;
+        if (!mixy.room.playback.isPlaying) return true;
         const isSameTrack = source.provider === "spotify"
             ? adaptersRef.current.spotify.currentTrack?.id === source.id
             : source.provider === "youtube"
                 ? adaptersRef.current.youtube.currentTrack?.videoId === source.id
                 : String(adaptersRef.current.soundcloud.currentTrack?.id) === String(source.id);
         if (!isSameTrack) loadSource(source);
-        if (mixy.room.playback.isPlaying) setPlaying(source.provider, true);
+        setPlaying(source.provider, true);
         return true;
     }, [loadSource, mixy.room, setPlaying, source]);
 
