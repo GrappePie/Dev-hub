@@ -158,16 +158,18 @@ export const useMixyRoom = ({ providers, activeProvider, syncOffsetMs }: UseMixy
 
     const mutate = useCallback(async (action: string, payload: Record<string, unknown> = {}) => {
         if (!codeRef.current) return null;
+        const requestCode = codeRef.current;
         try {
             const status = statusRef.current;
             const startedAt = Date.now();
-            const response = await mutateMixyRoom(action, codeRef.current, deviceId, participantName, {
+            const response = await mutateMixyRoom(action, requestCode, deviceId, participantName, {
                 providers: status.providers,
                 ready: status.ready,
                 activeProvider: status.activeProvider,
                 syncOffsetMs: status.syncOffsetMs,
                 ...payload,
             });
+            if (codeRef.current !== requestCode) return null;
             return applyResponse(response, startedAt);
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : "Mixy no pudo completar la operacion.");
@@ -223,8 +225,9 @@ export const useMixyRoom = ({ providers, activeProvider, syncOffsetMs }: UseMixy
                     lastHeartbeatRef.current = Date.now();
                     await mutate("heartbeat");
                 } else {
-                    const response = await readMixyRoom(codeRef.current);
-                    if (!cancelled) applyResponse(response, startedAt);
+                    const requestCode = codeRef.current;
+                    const response = await readMixyRoom(requestCode);
+                    if (!cancelled && codeRef.current === requestCode) applyResponse(response, startedAt);
                 }
             } catch (requestError) {
                 if (!cancelled) setError(requestError instanceof Error ? requestError.message : "Se perdio la conexion con Mixy.");
