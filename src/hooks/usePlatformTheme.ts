@@ -5,8 +5,8 @@ import type { ReactiveBackgroundVariant } from "@/components/ReactiveBackground"
 import {
     PLATFORM_THEME,
     DEFAULT_THEME,
-    PLATFORM_STORAGE_KEY,
-    BACKGROUND_VARIANT_STORAGE_KEY,
+    saveStoredPlatform,
+    saveStoredBackgroundVariant,
 } from "@/lib/platformTheme";
 
 interface UsePlatformThemeParams {
@@ -79,12 +79,12 @@ export function usePlatformTheme({
             tweensRef.current.push(tween);
         });
 
-        localStorage.setItem(PLATFORM_STORAGE_KEY, selectedPlatform);
+        saveStoredPlatform(selectedPlatform);
 
         return () => { tweensRef.current.forEach((t) => t.kill()); };
     }, [isAuthRedirecting, isCharacterVisible, isSessionActive, previewPlatform, selectedPlatform, showOAuthBridge]);
 
     useEffect(() => {
-        localStorage.setItem(BACKGROUND_VARIANT_STORAGE_KEY, backgroundVariant);
+        saveStoredBackgroundVariant(backgroundVariant);
     }, [backgroundVariant]);
 }

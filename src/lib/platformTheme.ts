@@ -1,26 +1,38 @@
 import type { PlatformId } from "@/components/CharacterSelectScreen";
 import type { ReactiveBackgroundVariant } from "@/components/ReactiveBackground";
+import { browserStorage } from "@/lib/storage";
 
-export const PLATFORM_STORAGE_KEY = "mh_selected_platform";
-export const BACKGROUND_VARIANT_STORAGE_KEY = "mh_background_variant";
+const PLATFORM_STORAGE_KEY = "mh_selected_platform";
+const BACKGROUND_VARIANT_STORAGE_KEY = "mh_background_variant";
 
 export const isPlatformId = (value: string): value is PlatformId =>
     value === "spotify" || value === "youtube" || value === "soundcloud" || value === "filea";
 
 export const getStoredPlatform = (): PlatformId => {
-    const raw = localStorage.getItem(PLATFORM_STORAGE_KEY);
+    const raw = browserStorage.getItem(PLATFORM_STORAGE_KEY);
     if (raw && isPlatformId(raw)) return raw;
     return "spotify";
 };
 
+export const saveStoredPlatform = (platform: PlatformId) => browserStorage.setItem(PLATFORM_STORAGE_KEY, platform);
+
+export const BACKGROUND_VARIANT_OPTIONS: ReadonlyArray<{ id: ReactiveBackgroundVariant; label: string }> = [
+    { id: "arcadeGrid", label: "GRID" },
+    { id: "starfieldShooter", label: "STAR" },
+    { id: "pixelCritters", label: "HOP" },
+];
+
 export const isBackgroundVariant = (value: string): value is ReactiveBackgroundVariant =>
-    value === "arcadeGrid" || value === "starfieldShooter" || value === "pixelCritters";
+    BACKGROUND_VARIANT_OPTIONS.some((option) => option.id === value);
 
 export const getStoredBackgroundVariant = (): ReactiveBackgroundVariant => {
-    const raw = localStorage.getItem(BACKGROUND_VARIANT_STORAGE_KEY);
+    const raw = browserStorage.getItem(BACKGROUND_VARIANT_STORAGE_KEY);
     if (raw && isBackgroundVariant(raw)) return raw;
     return "starfieldShooter";
 };
+
+export const saveStoredBackgroundVariant = (variant: ReactiveBackgroundVariant) =>
+    browserStorage.setItem(BACKGROUND_VARIANT_STORAGE_KEY, variant);
 
 export const PLATFORM_THEME: Record<PlatformId, Record<string, string>> = {
     spotify: {

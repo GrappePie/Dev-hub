@@ -3,7 +3,7 @@ import AlbumArtDisplay from "./AlbumArtDisplay";
 import PlayerControls from "./PlayerControls";
 import QueuePanel from "./QueuePanel";
 import CommentsPanel from "./CommentsPanel";
-import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
+import type { CurrentTrack, QueueTrack, ShuffleMode } from "@/types/player";
 import type { YouTubeComment } from "@/hooks/useYoutubePlayer";
 import type { MutableRefObject } from "react";
 
@@ -13,7 +13,7 @@ interface PlayerScreenProps {
     isPlaying: boolean;
     progress: number;
     volume: number;
-    shuffleMode: "off" | "shuffle" | "smart";
+    shuffleMode: ShuffleMode;
     repeatMode: number;
     isLiked: boolean;
     currentTime: string;

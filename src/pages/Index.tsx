@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
 import PlayerScreen from "@/components/PlayerScreen";
@@ -10,7 +10,6 @@ import useSpotifyPlayer from "@/hooks/useSpotifyPlayer";
 import useSoundcloudPlayer from "@/hooks/useSoundcloudPlayer";
 import useYoutubePlayer from "@/hooks/useYoutubePlayer";
 import type { YouTubeLibrarySection } from "@/hooks/useYoutubePlayer";
-import type { SoundcloudLibrarySection } from "@/hooks/useSoundcloudPlayer";
 import { useAudioAnalyser } from "@/hooks/useAudioAnalyser";
 import { useBpmDetector } from "@/hooks/useBpmDetector";
 import CharacterSelectScreen, { type PlatformId } from "@/components/CharacterSelectScreen";
@@ -25,12 +24,42 @@ import {
     PLATFORM_MESSAGE,
 } from "@/lib/platformTheme";
 import ArtistDialog from "@/components/ArtistDialog";
-import type { ArtistData, ArtistTopTrack } from "@/hooks/useSpotifyPlayer";
+import OAuthBridgeScreen from "@/components/OAuthBridgeScreen";
+import BackgroundVariantSelector from "@/components/BackgroundVariantSelector";
+import SpotifySearchPanel from "@/components/panels/SpotifySearchPanel";
+import SpotifyDevicesPanel from "@/components/panels/SpotifyDevicesPanel";
+import SpotifyLibraryPanel from "@/components/panels/SpotifyLibraryPanel";
+import YoutubeSearchPanel from "@/components/panels/YoutubeSearchPanel";
+import YoutubeLibraryPanel from "@/components/panels/YoutubeLibraryPanel";
+import type { ArtistData, ArtistTopTrack, PlaybackSnapshot, QueueTrack, SearchProvider } from "@/types/player";
+import {
+    createInitialSessionState,
+    resolveLoginToggle,
+    selectActiveModes,
+    sessionReducer,
+    type StreamingMode,
+} from "@/lib/session/sessionReducer";
+
+const IDLE_PLAYBACK: PlaybackSnapshot = { isPlaying: false, progress: 0, volume: 0.35 };
+
+const MODE_ACTIVATED_TOAST: Record<StreamingMode, { title: string; description: string }> = {
+    soundcloud: {
+        title: "Modo SoundCloud activado",
+        description: "Carga un enlace y reproduce desde el widget.",
+    },
+    youtube: {
+        title: "Modo YouTube activado",
+        description: "Busca tracks con el header y reproduce al instante.",
+    },
+};
 
 const Index = () => {
     const spotify = useSpotifyPlayer();
     const soundcloud = useSoundcloudPlayer();
     const youtube = useYoutubePlayer();
+    const { clearSearchResults: clearSpotifySearch, logout: logoutSpotify, startLogin: startSpotifyLogin } = spotify;
+    const { clearSearchResults: clearSoundcloudSearch, reset: resetSoundcloud } = soundcloud;
+    const { clearSearchResults: clearYoutubeSearch, reset: resetYoutube } = youtube;
     const sfx = useRetroSfx();
     const [oauthReturnDetected] = useState(() => {
         const params = new URLSearchParams(window.location.search);
@@ -38,25 +67,24 @@ const Index = () => {
         const state = params.get("state");
         return Boolean(code && (!state || state.startsWith("sp_")));
     });
-    const [searchQuery, setSearchQuery] = useState("");
-    const [isLoggedIn, setIsLoggedIn] = useState(spotify.isAuthenticated);
-    const [transitioning, setTransitioning] = useState(false);
-    const [pendingState, setPendingState] = useState<boolean | null>(null);
-    const [pendingCharacterState, setPendingCharacterState] = useState<boolean | null>(null);
-    const [libraryOpen, setLibraryOpen] = useState(false);
-    const [devicesOpen, setDevicesOpen] = useState(false);
-    const [showCharacterSelect, setShowCharacterSelect] = useState(false);
-    const [isCharacterVisible, setIsCharacterVisible] = useState(false);
-    const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>(() => getStoredPlatform());
+    const [session, dispatch] = useReducer(sessionReducer, spotify.isAuthenticated, (isLoggedIn: boolean) =>
+        createInitialSessionState({ isLoggedIn, selectedPlatform: getStoredPlatform() }),
+    );
+    const {
+        searchQuery,
+        isLoggedIn,
+        transitioning,
+        libraryOpen,
+        devicesOpen,
+        showCharacterSelect,
+        isCharacterVisible,
+        selectedPlatform,
+        previewPlatform,
+        isAuthRedirecting,
+        pendingModeActivation,
+        pendingModeDeactivation,
+    } = session;
     const [backgroundVariant, setBackgroundVariant] = useState<ReactiveBackgroundVariant>(() => getStoredBackgroundVariant());
-    const [previewPlatform, setPreviewPlatform] = useState<PlatformId | null>(null);
-    const [isAuthRedirecting, setIsAuthRedirecting] = useState(false);
-    const [soundcloudMode, setSoundcloudMode] = useState(false);
-    const [youtubeMode, setYoutubeMode] = useState(false);
-    const [fileaMode, setFileaMode] = useState(false);
-    const [pendingModeActivation, setPendingModeActivation] = useState<"soundcloud" | "youtube" | null>(null);
-    const [pendingModeDeactivation, setPendingModeDeactivation] = useState<"soundcloud" | "youtube" | null>(null);
-    const [soundcloudLibrarySection, setSoundcloudLibrarySection] = useState<SoundcloudLibrarySection>("playlists");
     const [youtubeLibrarySection, setYoutubeLibrarySection] = useState<YouTubeLibrarySection>("playlists");
     const [critterCommentsMode, setCritterCommentsMode] = useState(false);
     const [activeCritterComment, setActiveCritterComment] = useState<{ body: string; username: string } | null>(null);
@@ -70,9 +98,7 @@ const Index = () => {
     const [artistDialogOpen, setArtistDialogOpen] = useState(false);
     const [artistDialogData, setArtistDialogData] = useState<ArtistData | null>(null);
     const [artistDialogLoading, setArtistDialogLoading] = useState(false);
-    const isSoundcloudMode = selectedPlatform === "soundcloud" && soundcloudMode;
-    const isYouTubeMode = selectedPlatform === "youtube" && youtubeMode;
-    const isFileaMode = selectedPlatform === "filea" && fileaMode;
+    const { isSoundcloudMode, isYouTubeMode, isFileaMode } = selectActiveModes(session);
     const isSessionActive = isLoggedIn || isSoundcloudMode || isYouTubeMode || isFileaMode;
     const showOAuthBridge = !isLoggedIn && oauthReturnDetected && spotify.isAuthLoading;
     const lastAuthFeedbackIdRef = useRef<number | null>(null);
@@ -83,18 +109,16 @@ const Index = () => {
     const { bpm, beatRef } = useBpmDetector(analyser);
 
     useEffect(() => {
-        if (showCharacterSelect || isCharacterVisible) {
-            setPreviewPlatform(selectedPlatform);
-            return;
-        }
-        setPreviewPlatform(null);
+        dispatch({
+            type: "previewChanged",
+            platform: showCharacterSelect || isCharacterVisible ? selectedPlatform : null,
+        });
     }, [isCharacterVisible, selectedPlatform, showCharacterSelect]);
 
     useEffect(() => {
         if (isLoggedIn || showOAuthBridge) return;
         if (showCharacterSelect === isCharacterVisible) return;
-        setPendingCharacterState(showCharacterSelect);
-        setTransitioning(true);
+        dispatch({ type: "characterTransitionStarted", visible: showCharacterSelect });
     }, [isCharacterVisible, isLoggedIn, showCharacterSelect, showOAuthBridge]);
 
     usePlatformTheme({
@@ -109,8 +133,7 @@ const Index = () => {
 
     useEffect(() => {
         if (spotify.isAuthenticated === isLoggedIn) return;
-        setPendingState(spotify.isAuthenticated);
-        setTransitioning(true);
+        dispatch({ type: "loginTransitionStarted", loggedIn: spotify.isAuthenticated });
     }, [isLoggedIn, spotify.isAuthenticated]);
 
     useEffect(() => {
@@ -120,12 +143,6 @@ const Index = () => {
         lastAuthFeedbackIdRef.current = feedback.id;
         sfx(feedback.kind === "success" ? "success" : "fail");
     }, [sfx, spotify.authFeedback]);
-
-    useEffect(() => {
-        if (isLoggedIn) {
-            setIsAuthRedirecting(false);
-        }
-    }, [isLoggedIn]);
 
     useEffect(() => {
         if (youtube.volume > 0.01) {
@@ -144,184 +161,61 @@ const Index = () => {
     });
 
     useEffect(() => {
-        if (isLoggedIn) return;
-        setLibraryOpen(false);
-        setDevicesOpen(false);
-        setSearchQuery("");
-    }, [isLoggedIn]);
-
-    useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key !== "Escape") return;
-            setLibraryOpen(false);
-            setDevicesOpen(false);
-            setSearchQuery("");
-            spotify.clearSearchResults();
-            soundcloud.clearSearchResults();
-            youtube.clearSearchResults();
+            dispatch({ type: "escapePressed" });
+            clearSpotifySearch();
+            clearSoundcloudSearch();
+            clearYoutubeSearch();
         };
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [soundcloud.clearSearchResults, spotify.clearSearchResults, youtube.clearSearchResults]);
+    }, [clearSoundcloudSearch, clearSpotifySearch, clearYoutubeSearch]);
 
     useYoutubeKeyboardShortcuts(youtube, isYouTubeMode, youtubeVolumeBeforeMuteRef);
 
     const handleTransitionComplete = useCallback(() => {
-        if (pendingState !== null) {
-            setIsLoggedIn(pendingState);
-            setPendingState(null);
-        }
-        if (pendingCharacterState !== null) {
-            setIsCharacterVisible(pendingCharacterState);
-            setPendingCharacterState(null);
-        }
         if (pendingModeActivation === "soundcloud") {
-            youtube.reset();
-            setSoundcloudMode(true);
-            setYoutubeMode(false);
-            setLibraryOpen(false);
-            setIsAuthRedirecting(false);
-            setShowCharacterSelect(false);
-            setSearchQuery("");
-            toast({
-                title: "Modo SoundCloud activado",
-                description: "Carga un enlace y reproduce desde el widget.",
-            });
-            setPendingModeActivation(null);
-            return;
+            resetYoutube();
+        } else if (pendingModeActivation === "youtube") {
+            resetSoundcloud();
+        } else if (pendingModeDeactivation === "soundcloud") {
+            resetSoundcloud();
+        } else if (pendingModeDeactivation === "youtube") {
+            resetYoutube();
         }
-        if (pendingModeActivation === "youtube") {
-            soundcloud.reset();
-            setSoundcloudMode(false);
-            setYoutubeMode(true);
-            setLibraryOpen(false);
-            setIsAuthRedirecting(false);
-            setShowCharacterSelect(false);
-            setSearchQuery("");
-            toast({
-                title: "Modo YouTube activado",
-                description: "Busca tracks con el header y reproduce al instante.",
-            });
-            setPendingModeActivation(null);
-            return;
+        dispatch({ type: "transitionCompleted" });
+        if (pendingModeActivation) {
+            toast(MODE_ACTIVATED_TOAST[pendingModeActivation]);
         }
-        if (pendingModeDeactivation === "soundcloud") {
-            soundcloud.reset();
-            setSoundcloudMode(false);
-            setYoutubeMode(false);
-            setLibraryOpen(false);
-            setDevicesOpen(false);
-            setSearchQuery("");
-            setIsAuthRedirecting(false);
-            setPendingModeDeactivation(null);
-            return;
-        }
-        if (pendingModeDeactivation === "youtube") {
-            youtube.reset();
-            setYoutubeMode(false);
-            setSoundcloudMode(false);
-            setLibraryOpen(false);
-            setDevicesOpen(false);
-            setSearchQuery("");
-            setIsAuthRedirecting(false);
-            setPendingModeDeactivation(null);
-        }
-    }, [pendingCharacterState, pendingModeActivation, pendingModeDeactivation, pendingState, soundcloud.reset, youtube.reset]);
+    }, [pendingModeActivation, pendingModeDeactivation, resetSoundcloud, resetYoutube]);
 
     const onLoginToggle = useCallback(() => {
-        if (isFileaMode) {
-            setFileaMode(false);
-            setPendingModeActivation(null);
-            setPendingModeDeactivation(null);
-            setIsAuthRedirecting(false);
-            setShowCharacterSelect(true);
-            return;
+        const outcome = resolveLoginToggle({ isSoundcloudMode, isYouTubeMode, isFileaMode }, spotify.isAuthenticated);
+        dispatch({ type: "loginToggled", outcome });
+        if (outcome === "logoutSpotify") {
+            clearSpotifySearch();
+            logoutSpotify();
         }
-        if (isSoundcloudMode) {
-            setPendingModeActivation(null);
-            setPendingModeDeactivation("soundcloud");
-            setShowCharacterSelect(true);
-            return;
-        }
-        if (isYouTubeMode) {
-            setPendingModeActivation(null);
-            setPendingModeDeactivation("youtube");
-            setShowCharacterSelect(true);
-            return;
-        }
-        if (spotify.isAuthenticated) {
-            setLibraryOpen(false);
-            setDevicesOpen(false);
-            setSearchQuery("");
-            spotify.clearSearchResults();
-            setSoundcloudMode(false);
-            setYoutubeMode(false);
-            setFileaMode(false);
-            setPendingModeActivation(null);
-            setPendingModeDeactivation(null);
-            setIsAuthRedirecting(false);
-            setShowCharacterSelect(true);
-            spotify.logout();
-            return;
-        }
-        setIsAuthRedirecting(false);
-        setSoundcloudMode(false);
-        setYoutubeMode(false);
-        setFileaMode(false);
-        setPendingModeActivation(null);
-        setPendingModeDeactivation(null);
-        setShowCharacterSelect(true);
-    }, [isFileaMode, isSoundcloudMode, isYouTubeMode, spotify.clearSearchResults, spotify.isAuthenticated, spotify.logout]);
+    }, [isFileaMode, isSoundcloudMode, isYouTubeMode, clearSpotifySearch, spotify.isAuthenticated, logoutSpotify]);
 
     const onPlatformSelect = useCallback(
         (platform: PlatformId) => {
-            setSelectedPlatform(platform);
-            setPreviewPlatform(platform);
-            if (platform !== "spotify") {
-                if (platform === "soundcloud") {
-                    setPendingModeDeactivation(null);
-                    setPendingModeActivation("soundcloud");
-                    setFileaMode(false);
-                    setShowCharacterSelect(false);
-                    return;
-                }
-                if (platform === "youtube") {
-                    setPendingModeDeactivation(null);
-                    setPendingModeActivation("youtube");
-                    setFileaMode(false);
-                    setShowCharacterSelect(false);
-                    return;
-                }
-                if (platform === "filea") {
-                    sfx("coin");
-                    setPendingModeActivation(null);
-                    setPendingModeDeactivation(null);
-                    soundcloud.reset();
-                    youtube.reset();
-                    setSoundcloudMode(false);
-                    setYoutubeMode(false);
-                    setFileaMode(true);
-                    setIsAuthRedirecting(false);
-                    setShowCharacterSelect(false);
-                    toast({
-                        title: "FILEA READY",
-                        description: "La idol pixel esta activa en el selector.",
-                    });
-                    return;
-                }
-            }
+            dispatch({ type: "platformSelected", platform });
+            // Streaming modes switch providers in handleTransitionComplete, once the transition covers the screen.
+            if (platform === "soundcloud" || platform === "youtube") return;
             sfx("coin");
-            setPendingModeActivation(null);
-            setPendingModeDeactivation(null);
-            soundcloud.reset();
-            youtube.reset();
-            setSoundcloudMode(false);
-            setYoutubeMode(false);
-            setFileaMode(false);
-            setIsAuthRedirecting(true);
-            setShowCharacterSelect(true);
-            void spotify.startLogin().catch(() => {
-                setIsAuthRedirecting(false);
+            resetSoundcloud();
+            resetYoutube();
+            if (platform === "filea") {
+                toast({
+                    title: "FILEA READY",
+                    description: "La idol pixel esta activa en el selector.",
+                });
+                return;
+            }
+            void startSpotifyLogin().catch(() => {
+                dispatch({ type: "authRedirectFailed" });
                 toast({
                     variant: "destructive",
                     title: "No se pudo abrir Spotify",
@@ -329,50 +223,40 @@ const Index = () => {
                 });
             });
         },
-        [sfx, soundcloud.reset, spotify.startLogin, youtube.reset]
+        [sfx, resetSoundcloud, startSpotifyLogin, resetYoutube]
     );
 
     const onLibraryToggle = useCallback(() => {
+        const opening = !libraryOpen;
+        dispatch({ type: "libraryToggled" });
         if (isSoundcloudMode) {
-            const next = !libraryOpen;
-            setLibraryOpen(next);
-            setDevicesOpen(false);
-            if (next && soundcloud.isAuthenticated) {
+            if (opening && soundcloud.isAuthenticated) {
                 void soundcloud.fetchLibrary();
             }
             return;
         }
         if (isYouTubeMode) {
-            const next = !libraryOpen;
-            setLibraryOpen(next);
-            setDevicesOpen(false);
-            if (next && youtube.isAuthenticated) {
+            if (opening && youtube.isAuthenticated) {
                 void youtube.fetchLibrary();
             }
             return;
         }
-        setLibraryOpen((prev) => !prev);
-        setDevicesOpen(false);
         void spotify.ensureLibraryLoaded();
     }, [isSoundcloudMode, isYouTubeMode, libraryOpen, soundcloud, spotify, youtube]);
 
     const onDevicesToggle = useCallback(() => {
-        setDevicesOpen((prev) => !prev);
-        setLibraryOpen(false);
+        dispatch({ type: "devicesToggled" });
         void spotify.fetchDevices();
     }, [spotify]);
 
+    const onSearchChange = useCallback((query: string) => dispatch({ type: "searchQueryChanged", query }), []);
+    const onPreviewChange = useCallback((platform: PlatformId) => dispatch({ type: "previewChanged", platform }), []);
+
+    const searchProvider: SearchProvider = isSoundcloudMode ? soundcloud : isYouTubeMode ? youtube : spotify;
+    const { searchAndPlay } = searchProvider;
     const onSearchSubmit = useCallback(() => {
-        if (isSoundcloudMode) {
-            void soundcloud.searchAndPlay(searchQuery);
-            return;
-        }
-        if (isYouTubeMode) {
-            void youtube.searchAndPlay(searchQuery);
-            return;
-        }
-        void spotify.searchAndPlay(searchQuery);
-    }, [isSoundcloudMode, isYouTubeMode, searchQuery, soundcloud.searchAndPlay, spotify.searchAndPlay, youtube.searchAndPlay]);
+        void searchAndPlay(searchQuery);
+    }, [searchAndPlay, searchQuery]);
 
     const handleSpotifyArtistClick = useCallback(async (name: string) => {
         if (!name) return;
@@ -402,27 +286,18 @@ const Index = () => {
     }, [soundcloud]);
 
     const queueById = useMemo(() => {
-        const map = new Map<string, (typeof spotify.queue)[number]>();
+        const map = new Map<string, QueueTrack>();
         spotify.queue.forEach((track) => map.set(track.id, track));
         return map;
     }, [spotify.queue]);
 
-    const hasSearchResults =
+    const hasSearchQuery = searchQuery.trim().length > 0;
+    const hasSpotifySearchResults =
         spotify.searchResults.tracks.length > 0 ||
         spotify.searchResults.albums.length > 0 ||
         spotify.searchResults.artists.length > 0;
-
-    const hasSoundcloudSearchResults = soundcloud.searchResults.length > 0;
-    const hasYoutubeSearchResults = youtube.searchResults.length > 0;
-    const soundcloudLibraryItems = soundcloud.libraryBySection[soundcloudLibrarySection] || [];
-    const soundcloudHasMore = Boolean(soundcloud.libraryNextBySection[soundcloudLibrarySection]);
-    const soundcloudLoadingMore = soundcloud.libraryLoadingMoreBySection[soundcloudLibrarySection];
-    const youtubeLibraryItems = youtube.libraryBySection[youtubeLibrarySection] || [];
-    const youtubeHasMore = Boolean(youtube.libraryNextBySection[youtubeLibrarySection]);
-    const youtubeLoadingMore = youtube.libraryLoadingMoreBySection[youtubeLibrarySection];
-    const showSpotifySearchPanel = isLoggedIn && searchQuery.trim().length > 0 && (spotify.searchLoading || hasSearchResults);
-    const showSoundcloudSearchPanel = isSoundcloudMode && searchQuery.trim().length > 0 && (soundcloud.searchLoading || hasSoundcloudSearchResults);
-    const showYoutubeSearchPanel = isYouTubeMode && searchQuery.trim().length > 0 && (youtube.searchLoading || hasYoutubeSearchResults);
+    const showSpotifySearchPanel = isLoggedIn && hasSearchQuery && (spotify.searchLoading || hasSpotifySearchResults);
+    const showYoutubeSearchPanel = isYouTubeMode && hasSearchQuery && (youtube.searchLoading || youtube.searchResults.length > 0);
     const showYoutubeAuthControl = isYouTubeMode;
     const youtubeAuthLabel = youtube.isAuthLoading
         ? "Conectando..."
@@ -430,18 +305,22 @@ const Index = () => {
             ? "Desconectar YT"
             : "Conectar YT";
     const loginMessage = selectedPlatform === "spotify" ? spotify.statusText : PLATFORM_MESSAGE[selectedPlatform];
-    const playbackActive = isLoggedIn ? spotify.isPlaying : isSoundcloudMode ? soundcloud.isPlaying : isYouTubeMode ? youtube.isPlaying : false;
-    const playbackProgress = isLoggedIn ? spotify.progress : isSoundcloudMode ? soundcloud.progress : isYouTubeMode ? youtube.progress : 0;
-    const playbackVolume = isLoggedIn ? spotify.volume : isSoundcloudMode ? soundcloud.volume : isYouTubeMode ? youtube.volume : 0.35;
+    const playback: PlaybackSnapshot = isLoggedIn
+        ? spotify
+        : isSoundcloudMode
+            ? soundcloud
+            : isYouTubeMode
+                ? youtube
+                : IDLE_PLAYBACK;
 
     return (
         <>
         <div className="min-h-screen relative scanlines">
             <ReactiveBackground
                 enabled={isSessionActive || isCharacterVisible || showOAuthBridge}
-                isPlaying={playbackActive}
-                progress={playbackProgress}
-                volume={playbackVolume}
+                isPlaying={playback.isPlaying}
+                progress={playback.progress}
+                volume={playback.volume}
                 variant={backgroundVariant}
                 analyser={analyser}
                 activeComment={critterCommentsMode ? activeCritterComment : null}
@@ -452,7 +331,7 @@ const Index = () => {
             <PixelTransition
                 active={transitioning}
                 onComplete={handleTransitionComplete}
-                onTransitionEnd={() => setTransitioning(false)}
+                onTransitionEnd={() => dispatch({ type: "transitionEnded" })}
             />
             <div className="max-w-screen-xl mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 relative z-10">
                 <div className="pixel-box-elevated overflow-hidden">
@@ -478,326 +357,28 @@ const Index = () => {
                             activeDeviceName={spotify.activeDeviceName}
                             searchQuery={searchQuery}
                             searchPlaceholder={isSoundcloudMode ? "► BUSCAR TRACK EN SOUNDCLOUD..." : isYouTubeMode ? "► BUSCAR TRACK EN YOUTUBE..." : "► BUSCAR..."}
-                            onSearchChange={setSearchQuery}
+                            onSearchChange={onSearchChange}
                             onSearchSubmit={onSearchSubmit}
                             onLibraryToggle={onLibraryToggle}
                             onDevicesToggle={onDevicesToggle}
                         />
                     )}
 
-                    {showSpotifySearchPanel && (
-                        <div className="px-4 pt-4">
-                            <div className="pixel-box p-3 max-h-96 overflow-auto">
-                                {spotify.searchLoading && (
-                                    <p className="text-sm text-muted-foreground">Buscando resultados...</p>
-                                )}
-                                {!spotify.searchLoading && !hasSearchResults && (
-                                    <p className="text-sm text-muted-foreground">Sin resultados.</p>
-                                )}
-                                {!!spotify.searchResults.tracks.length && (
-                                    <div className="mb-3">
-                                        <p className="font-display text-[8px] text-primary mb-2">CANCIONES</p>
-                                        <div className="space-y-1">
-                                            {spotify.searchResults.tracks.map((track) => (
-                                                <div
-                                                    key={track.id}
-                                                    className="flex items-center gap-2 px-2 py-2 hover:bg-secondary cursor-pointer"
-                                                    onClick={() => {
-                                                        void spotify.playSearchTrack(track);
-                                                    }}
-                                                >
-                                                    <img src={track.image} alt={track.name} className="w-8 h-8 border-2 border-border object-cover" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm truncate">{track.name}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
-                                                    </div>
-                                                    <button
-                                                        className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                                        onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            void spotify.addToQueue(track.uri);
-                                                        }}
-                                                    >
-                                                        Colar
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {!!spotify.searchResults.albums.length && (
-                                    <div className="mb-3">
-                                        <p className="font-display text-[8px] text-primary mb-2">ALBUMES</p>
-                                        <div className="space-y-1">
-                                            {spotify.searchResults.albums.map((album) => (
-                                                <div
-                                                    key={album.id}
-                                                    className="flex items-center gap-2 px-2 py-2 hover:bg-secondary cursor-pointer"
-                                                    onClick={() => void spotify.playAlbum(album.id)}
-                                                >
-                                                    <img src={album.image} alt={album.name} className="w-8 h-8 border-2 border-border object-cover" />
-                                                    <p className="text-sm truncate">{album.name}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {!!spotify.searchResults.artists.length && (
-                                    <div>
-                                        <p className="font-display text-[8px] text-primary mb-2">ARTISTAS</p>
-                                        <div className="space-y-1">
-                                            {spotify.searchResults.artists.map((artist) => (
-                                                <div key={artist.id} className="flex items-center gap-2 px-2 py-2">
-                                                    <img src={artist.image} alt={artist.name} className="w-8 h-8 border-2 border-border rounded-full object-cover" />
-                                                    <p className="text-sm truncate">{artist.name}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {showSpotifySearchPanel && <SpotifySearchPanel player={spotify} />}
 
-                    {showYoutubeSearchPanel && (
-                        <div className="px-4 pt-4">
-                            <div className="pixel-box p-3 max-h-96 overflow-auto">
-                                {youtube.searchLoading && (
-                                    <p className="text-sm text-muted-foreground">Buscando resultados...</p>
-                                )}
-                                {!youtube.searchLoading && !hasYoutubeSearchResults && (
-                                    <p className="text-sm text-muted-foreground">Sin resultados.</p>
-                                )}
-                                {!!youtube.searchResults.length && (
-                                    <div className="space-y-1">
-                                        {youtube.searchResults.map((item) => (
-                                            <div
-                                                key={`yt-search-${item.id}`}
-                                                className="flex items-center gap-2 px-2 py-2 hover:bg-secondary cursor-pointer"
-                                                onClick={() => {
-                                                    youtube.playSearchTrack(item);
-                                                }}
-                                            >
-                                                <img
-                                                    src={item.image}
-                                                    alt={item.title}
-                                                    className="w-8 h-8 border-2 border-border object-cover"
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm truncate">{item.title}</p>
-                                                    <p className="text-xs text-muted-foreground truncate">{item.artist}</p>
-                                                </div>
-                                                <button
-                                                    className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        youtube.playSearchTrack(item);
-                                                    }}
-                                                >
-                                                    Play
-                                                </button>
-                                                <button
-                                                    className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        youtube.addToQueue(item);
-                                                    }}
-                                                >
-                                                    Colar
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {showYoutubeSearchPanel && <YoutubeSearchPanel player={youtube} />}
 
                     {isYouTubeMode && libraryOpen && (
-                        <div className="px-4 pt-4">
-                            <div className="pixel-box p-3">
-                                <div className="flex items-center justify-between mb-3">
-                                    <p className="font-display text-[8px] text-primary">BIBLIOTECA YOUTUBE</p>
-                                    <div className="flex items-center gap-2">
-                                        {youtube.isAuthenticated && (
-                                            <button
-                                                onClick={() => void youtube.fetchLibrary()}
-                                                className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                                disabled={youtube.libraryLoading}
-                                            >
-                                                {youtube.libraryLoading ? "..." : "Refresh"}
-                                            </button>
-                                        )}
-                                        {youtube.isAuthenticated ? (
-                                            <button
-                                                onClick={youtube.logout}
-                                                className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                            >
-                                                Salir
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => void youtube.startLogin()}
-                                                className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                                disabled={youtube.isAuthLoading}
-                                            >
-                                                {youtube.isAuthLoading ? "Conectando..." : "Conectar"}
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {youtube.isAuthenticated && (
-                                    <>
-                                        <p className="text-sm text-muted-foreground mb-2 truncate">
-                                            Cuenta: {youtube.accountName || "Conectada"}
-                                        </p>
-                                        <div className="grid grid-cols-3 gap-1 mb-3">
-                                            {(["playlists", "likes", "watchLater"] as YouTubeLibrarySection[]).map((section) => {
-                                                const isActive = youtubeLibrarySection === section;
-                                                const count = youtube.libraryBySection[section]?.length || 0;
-                                                const label = section === "playlists" ? "PLAYLISTS" : section === "likes" ? "LIKES" : "WATCH";
-                                                return (
-                                                    <button
-                                                        key={`yt-lib-tab-${section}`}
-                                                        onClick={() => {
-                                                            sfx("select");
-                                                            setYoutubeLibrarySection(section);
-                                                        }}
-                                                        className={`px-2 py-1 font-display text-[7px] border-2 ${
-                                                            isActive ? "border-primary bg-secondary text-primary" : "border-border text-muted-foreground"
-                                                        }`}
-                                                    >
-                                                        {label} ({count})
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
-
-                                {!youtube.isAuthenticated && (
-                                    <p className="text-sm text-muted-foreground">
-                                        Conecta Google para ver playlists, likes y watch later de YouTube.
-                                    </p>
-                                )}
-                                {youtube.isAuthenticated && !youtubeLibraryItems.length && !youtube.libraryLoading && (
-                                    <p className="text-sm text-muted-foreground">No hay elementos en {youtubeLibrarySection}.</p>
-                                )}
-                                {youtube.isAuthenticated && youtube.libraryLoading && (
-                                    <p className="text-sm text-muted-foreground">Cargando biblioteca...</p>
-                                )}
-
-                                <div className="space-y-1 max-h-80 overflow-auto">
-                                    {youtubeLibraryItems.map((item) => (
-                                        <button
-                                            key={`yt-lib-${youtubeLibrarySection}-${item.id}`}
-                                            onClick={() => void youtube.playLibraryItem(item)}
-                                            className="w-full text-left px-2 py-2 hover:bg-secondary flex items-center gap-2"
-                                        >
-                                            <img
-                                                src={item.image}
-                                                alt={item.title}
-                                                className="w-8 h-8 border-2 border-border object-cover"
-                                            />
-                                            <div className="min-w-0">
-                                                <p className="text-sm truncate">{item.title}</p>
-                                                <p className="text-xs text-muted-foreground truncate">
-                                                    {item.artist}
-                                                    {item.kind === "playlist" ? ` · ${item.trackCount || 0} tracks` : ""}
-                                                </p>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {youtube.isAuthenticated && youtubeHasMore && (
-                                    <button
-                                        onClick={() => void youtube.loadMoreLibrarySection(youtubeLibrarySection)}
-                                        className="retro-btn-secondary !text-[7px] !px-2 !py-1 mt-3"
-                                        disabled={youtubeLoadingMore}
-                                    >
-                                        {youtubeLoadingMore ? "Cargando..." : "Cargar mas"}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                        <YoutubeLibraryPanel
+                            player={youtube}
+                            section={youtubeLibrarySection}
+                            onSectionChange={setYoutubeLibrarySection}
+                        />
                     )}
 
-                    {isLoggedIn && devicesOpen && (
-                        <div className="px-4 pt-4">
-                            <div className="pixel-box p-3">
-                                <p className="font-display text-[8px] text-primary mb-2">DISPOSITIVOS DISPONIBLES</p>
-                                <div className="space-y-2">
-                                    {!spotify.devices.length && (
-                                        <p className="text-sm text-muted-foreground">No hay dispositivos activos.</p>
-                                    )}
-                                    {spotify.devices.map((device) => (
-                                        <button
-                                            key={device.id}
-                                            className={`w-full text-left px-3 py-2 border-2 transition-colors ${
-                                                device.isActive
-                                                    ? "border-primary bg-secondary"
-                                                    : "border-border hover:border-primary/60"
-                                            }`}
-                                            onClick={() => void spotify.transferPlayback(device.id)}
-                                            disabled={device.isRestricted}
-                                        >
-                                            <p className="text-sm">{device.name}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {device.type} {device.isActive ? "· activo" : ""}
-                                            </p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    {isLoggedIn && devicesOpen && <SpotifyDevicesPanel player={spotify} />}
 
-                    {isLoggedIn && libraryOpen && (
-                        <div className="px-4 pt-4">
-                            <div className="pixel-box p-3">
-                                <div className="flex items-center justify-between mb-3">
-                                    <p className="font-display text-[8px] text-primary">BIBLIOTECA</p>
-                                    <button
-                                        onClick={() => void spotify.playFavorites()}
-                                        className="retro-btn-secondary !text-[7px] !px-2 !py-1"
-                                    >
-                                        Favoritos
-                                    </button>
-                                </div>
-                                <div className="space-y-1 max-h-80 overflow-auto">
-                                    {!spotify.playlists.length && !spotify.playlistsLoading && (
-                                        <p className="text-sm text-muted-foreground">No hay playlists disponibles.</p>
-                                    )}
-                                    {spotify.playlists.map((playlist) => (
-                                        <button
-                                            key={playlist.id}
-                                            onClick={() => void spotify.playPlaylist(playlist.id)}
-                                            className="w-full text-left px-2 py-2 hover:bg-secondary flex items-center gap-2"
-                                        >
-                                            <img src={playlist.image} alt={playlist.name} className="w-8 h-8 border-2 border-border object-cover" />
-                                            <div className="min-w-0">
-                                                <p className="text-sm truncate">{playlist.name}</p>
-                                                <p className="text-xs text-muted-foreground truncate">
-                                                    {playlist.owner} · {playlist.tracksTotal} tracks
-                                                </p>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                                {spotify.playlistsHasMore && (
-                                    <button
-                                        onClick={() => void spotify.loadPlaylists("append")}
-                                        className="retro-btn-secondary !text-[7px] !px-2 !py-1 mt-3"
-                                        disabled={spotify.playlistsLoading}
-                                    >
-                                        {spotify.playlistsLoading ? "Cargando..." : "Cargar mas"}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {isLoggedIn && libraryOpen && <SpotifyLibraryPanel player={spotify} />}
 
                     {isLoggedIn ? (
                         <PlayerScreen
@@ -934,28 +515,17 @@ const Index = () => {
                     ) : (
                         <>
                             {showOAuthBridge ? (
-                                <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
-                                    <div className="pixel-box p-8 max-w-lg w-full">
-                                        <p className="font-display text-[9px] text-primary mb-3">CONECTANDO SPOTIFY...</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            Validando autorizacion y preparando el reproductor.
-                                        </p>
-                                    </div>
-                                </div>
+                                <OAuthBridgeScreen />
                             ) : isCharacterVisible ? (
                                 <CharacterSelectScreen
                                     onSelect={onPlatformSelect}
-                                    onPreviewChange={setPreviewPlatform}
-                                    onBack={() => {
-                                        setPreviewPlatform(null);
-                                        setIsAuthRedirecting(false);
-                                        setShowCharacterSelect(false);
-                                    }}
+                                    onPreviewChange={onPreviewChange}
+                                    onBack={() => dispatch({ type: "characterSelectClosed" })}
                                     initialPlatform={selectedPlatform}
                                 />
                             ) : (
                                 <LoginScreen
-                                    onLogin={() => setShowCharacterSelect(true)}
+                                    onLogin={() => dispatch({ type: "characterSelectOpened" })}
                                     message={loginMessage}
                                     isLoading={selectedPlatform === "spotify" && spotify.isAuthLoading && !spotify.sdkReady}
                                 />
@@ -964,41 +534,7 @@ const Index = () => {
                     )}
                 </div>
 
-                <div className="mt-4 flex items-center justify-center gap-2">                    <span className="font-display text-[7px] text-muted-foreground">BG FX</span>
-                    <button
-                        onClick={() => {
-                            sfx("select");
-                            setBackgroundVariant("arcadeGrid");
-                        }}
-                        className={`retro-btn-secondary !text-[7px] !px-2 !py-1 ${
-                            backgroundVariant === "arcadeGrid" ? "!border-primary !text-primary !bg-secondary" : ""
-                        }`}
-                    >
-                        GRID
-                    </button>
-                    <button
-                        onClick={() => {
-                            sfx("select");
-                            setBackgroundVariant("starfieldShooter");
-                        }}
-                        className={`retro-btn-secondary !text-[7px] !px-2 !py-1 ${
-                            backgroundVariant === "starfieldShooter" ? "!border-primary !text-primary !bg-secondary" : ""
-                        }`}
-                    >
-                        STAR
-                    </button>
-                    <button
-                        onClick={() => {
-                            sfx("select");
-                            setBackgroundVariant("pixelCritters");
-                        }}
-                        className={`retro-btn-secondary !text-[7px] !px-2 !py-1 ${
-                            backgroundVariant === "pixelCritters" ? "!border-primary !text-primary !bg-secondary" : ""
-                        }`}
-                    >
-                        HOP
-                    </button>
-                </div>
+                <BackgroundVariantSelector value={backgroundVariant} onChange={setBackgroundVariant} />
 
                 <div className="text-center mt-4">
                     <p className="font-display text-[7px] text-muted-foreground">

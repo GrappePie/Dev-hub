@@ -8,10 +8,11 @@ import { Volume1 } from "pixelarticons/react/Volume1";
 import { Volume3 } from "pixelarticons/react/Volume3";
 import PixelIcon from "@/components/PixelIcon";
 import type { SVGProps } from "react";
+import type { ShuffleMode } from "@/types/player";
 
 interface PlayerControlsProps {
     isPlaying: boolean;
-    shuffleMode: "off" | "shuffle" | "smart";
+    shuffleMode: ShuffleMode;
     repeatMode: number;
     progress: number;
     volume: number;

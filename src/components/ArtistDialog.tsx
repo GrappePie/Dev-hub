@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ArtistData, ArtistTopTrack } from "@/hooks/useSpotifyPlayer";
+import type { ArtistData, ArtistTopTrack } from "@/types/player";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Play } from "pixelarticons/react/Play";
 import { Link } from "pixelarticons/react/Link";

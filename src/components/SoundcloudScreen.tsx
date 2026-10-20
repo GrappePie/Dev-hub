@@ -14,6 +14,7 @@ import Visualizer from "@/components/Visualizer";
 import ScrollingText from "@/components/ScrollingText";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { SoundcloudLibrarySection, ScTimedComment } from "@/hooks/useSoundcloudPlayer";
+import type { ShuffleMode } from "@/types/player";
 interface SoundcloudPlaylistItem {
     id: number;
     title: string;
@@ -73,7 +74,7 @@ interface SoundcloudScreenProps {
     onToggleLike: () => void;
     expandedPlaylist: { id: number; title: string; tracks: SoundcloudPlaylistItem[] } | null;
     expandedPlaylistLoading: boolean;
-    shuffleMode: "off" | "shuffle" | "smart";
+    shuffleMode: ShuffleMode;
     onOpenPlaylist: (playlist: SoundcloudPlaylistItem) => void;
     onCloseExpandedPlaylist: () => void;
     onToggleShuffle: () => void;
