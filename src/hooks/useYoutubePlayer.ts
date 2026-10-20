@@ -232,6 +232,7 @@ const mapCurrentTrack = (track: YouTubeTrack): CurrentTrack => ({
     uri: track.uri,
     title: track.title,
     artist: track.artist,
+    artistNames: [track.artist],
     durationMs: track.durationMs,
     duration: track.duration,
     albumArt: track.image || fallbackAlbumArt,
@@ -243,7 +244,6 @@ export const useYoutubePlayer = () => {
     const playerHostRef = useCallback((node: HTMLDivElement | null) => {
         setPlayerHostEl(node);
         if (!node) setPlayerReady(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     const playerRef = useRef<YouTubePlayer | null>(null);
     const tokenClientRef = useRef<GoogleTokenClient | null>(null);
@@ -886,6 +886,7 @@ export const useYoutubePlayer = () => {
 
     useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
+        const { PlayerState } = window.YT;
         const player = new window.YT.Player(playerHostEl, {
             width: "0",
             height: "0",
@@ -910,16 +911,16 @@ export const useYoutubePlayer = () => {
                     }
                 },
                 onStateChange: (event) => {
-                    if (event.data === window.YT.PlayerState.PLAYING) {
+                    if (event.data === PlayerState.PLAYING) {
                         setIsPlaying(true);
                         setStatusText("Reproduciendo en YouTube.");
-                    } else if (event.data === window.YT.PlayerState.PAUSED) {
+                    } else if (event.data === PlayerState.PAUSED) {
                         setIsPlaying(false);
                         setStatusText("Pausado.");
-                    } else if (event.data === window.YT.PlayerState.ENDED) {
+                    } else if (event.data === PlayerState.ENDED) {
                         setIsPlaying(false);
                         void handleTrackEnd();
-                    } else if (event.data === window.YT.PlayerState.BUFFERING) {
+                    } else if (event.data === PlayerState.BUFFERING) {
                         setStatusText("Buffering...");
                     }
                 },
@@ -1090,7 +1091,7 @@ export const useYoutubePlayer = () => {
     const togglePlayPause = useCallback(() => {
         const player = playerRef.current;
         if (!player) return;
-        if (player.getPlayerState() === window.YT.PlayerState.PLAYING) {
+        if (player.getPlayerState() === window.YT?.PlayerState.PLAYING) {
             player.pauseVideo();
         } else {
             player.playVideo();

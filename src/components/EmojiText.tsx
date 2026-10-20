@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-// @ts-ignore — twemoji has no bundled types
 import twemoji from "twemoji";
 
 interface EmojiTextProps {

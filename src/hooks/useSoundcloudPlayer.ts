@@ -79,6 +79,23 @@ interface SoundcloudCollectionResponse<T> {
     next_href?: string | null;
 }
 
+/** Loose shape of the track, playlist and like items returned by the SoundCloud API. */
+interface SoundcloudApiItem {
+    id?: number | string;
+    title?: string;
+    permalink_url?: string;
+    artwork_url?: string | null;
+    duration?: number;
+    track_count?: number;
+    user?: { id?: number | string; username?: string; avatar_url?: string | null };
+    tracks?: SoundcloudApiItem[];
+    track?: SoundcloudApiItem;
+}
+
+const hasPermalink = <T extends { permalink_url?: string }>(
+    item: T | null | undefined
+): item is T & { permalink_url: string } => Boolean(item?.permalink_url);
+
 const EMPTY_LIBRARY_SECTIONS: Record<SoundcloudLibrarySection, SoundcloudPlaylist[]> = {
     playlists: [],
     tracks: [],
@@ -165,9 +182,9 @@ const dedupeByPermalink = (items: SoundcloudPlaylist[]) => {
     return Array.from(uniqueByUrl.values());
 };
 
-const mapPlaylistItems = (items: any[]): SoundcloudPlaylist[] =>
+const mapPlaylistItems = (items: SoundcloudApiItem[]): SoundcloudPlaylist[] =>
     items
-        .filter((item) => item?.permalink_url)
+        .filter(hasPermalink)
         .map((item) => ({
             id: Number(item.id),
             title: item.title || "Playlist",
@@ -178,9 +195,9 @@ const mapPlaylistItems = (items: any[]): SoundcloudPlaylist[] =>
             kind: "playlist" as const,
         }));
 
-const mapTrackItems = (items: any[], subtitle: string, kind: "track" | "like"): SoundcloudPlaylist[] =>
+const mapTrackItems = (items: SoundcloudApiItem[], subtitle: string, kind: "track" | "like"): SoundcloudPlaylist[] =>
     items
-        .filter((item) => item?.permalink_url)
+        .filter(hasPermalink)
         .map((item) => ({
             id: Number(item.id),
             title: item.title || (kind === "like" ? "Like" : "Track"),
@@ -193,7 +210,7 @@ const mapTrackItems = (items: any[], subtitle: string, kind: "track" | "like"): 
             duration_ms: item?.duration || 0,
         }));
 
-const mapLikeItems = (items: any[]): SoundcloudPlaylist[] => {
+const mapLikeItems = (items: SoundcloudApiItem[]): SoundcloudPlaylist[] => {
     const tracks = items
         .map((entry) => entry?.track || entry)
         .filter(Boolean);
@@ -384,19 +401,19 @@ export const useSoundcloudPlayer = () => {
             const nextLibrary: Record<SoundcloudLibrarySection, SoundcloudPlaylist[]> = { ...EMPTY_LIBRARY_SECTIONS };
 
             if (playlistsResponse.ok) {
-                const { items, nextHref } = parseCollectionResponse<any>(await playlistsResponse.json());
+                const { items, nextHref } = parseCollectionResponse<SoundcloudApiItem>(await playlistsResponse.json());
                 nextLibrary.playlists = dedupeByPermalink(mapPlaylistItems(items));
                 nextBySection.playlists = nextHref;
             }
 
             if (tracksResponse.ok) {
-                const { items, nextHref } = parseCollectionResponse<any>(await tracksResponse.json());
+                const { items, nextHref } = parseCollectionResponse<SoundcloudApiItem>(await tracksResponse.json());
                 nextLibrary.tracks = dedupeByPermalink(mapTrackItems(items, "Track propio", "track"));
                 nextBySection.tracks = nextHref;
             }
 
             if (likesResponse.ok) {
-                const { items, nextHref } = parseCollectionResponse<any>(await likesResponse.json());
+                const { items, nextHref } = parseCollectionResponse<SoundcloudApiItem>(await likesResponse.json());
                 nextLibrary.likes = dedupeByPermalink(mapLikeItems(items));
                 nextBySection.likes = nextHref;
             }
@@ -428,7 +445,7 @@ export const useSoundcloudPlayer = () => {
                 const response = await scApi(nextHref, {}, { silent: true, includeClientId: false });
                 if (!response.ok) return;
                 const raw = await response.json();
-                const { items, nextHref: newNextHref } = parseCollectionResponse<any>(raw);
+                const { items, nextHref: newNextHref } = parseCollectionResponse<SoundcloudApiItem>(raw);
 
                 const mapped =
                     section === "playlists"
@@ -696,10 +713,10 @@ export const useSoundcloudPlayer = () => {
                         const res = await scApiRef.current?.(`/tracks/${trackId}/related?limit=10`, {}, { silent: true });
                         if (res?.ok) {
                             const data = await res.json();
-                            const collection = Array.isArray(data) ? data : Array.isArray(data?.collection) ? data.collection : [];
+                            const collection: SoundcloudApiItem[] = Array.isArray(data) ? data : Array.isArray(data?.collection) ? data.collection : [];
                             const related = collection
-                                .filter((t: any) => t?.permalink_url)
-                                .map((t: any) => ({
+                                .filter(hasPermalink)
+                                .map((t) => ({
                                     id: Number(t.id),
                                     title: t.title || "Track",
                                     permalink_url: t.permalink_url,
@@ -720,7 +737,9 @@ export const useSoundcloudPlayer = () => {
                                 return;
                             }
                         }
-                    } catch (_) {}
+                    } catch {
+                        // Related tracks are best-effort; fall back to a random pick from the queue.
+                    }
                     const nextIdx = Math.floor(Math.random() * queue.length);
                     searchQueueIndexRef.current = nextIdx;
                     setTimeout(() => {
@@ -764,11 +783,13 @@ export const useSoundcloudPlayer = () => {
         widget.bind(Events.PLAY_PROGRESS, onProgress);
 
         return () => {
-            try { widget.unbind(Events.READY); } catch (_) {}
-            try { widget.unbind(Events.PLAY); } catch (_) {}
-            try { widget.unbind(Events.PAUSE); } catch (_) {}
-            try { widget.unbind(Events.FINISH); } catch (_) {}
-            try { widget.unbind(Events.PLAY_PROGRESS); } catch (_) {}
+            for (const event of [Events.READY, Events.PLAY, Events.PAUSE, Events.FINISH, Events.PLAY_PROGRESS]) {
+                try {
+                    widget.unbind(event);
+                } catch {
+                    // The widget iframe may already be gone; nothing left to unbind.
+                }
+            }
             if (widgetRef.current === widget) widgetRef.current = null;
         };
     }, [sdkReady, iframeSrc, syncCurrentTrack]);
@@ -802,6 +823,7 @@ export const useSoundcloudPlayer = () => {
                 uri: normalized,
                 title: meta.title,
                 artist: meta.artist || "SoundCloud",
+                artistNames: [meta.artist || "SoundCloud"],
                 durationMs: meta.duration_ms || 0,
                 duration: formatMs(meta.duration_ms || 0),
                 albumArt: upscaleArtwork(meta.artwork_url || null),
@@ -846,10 +868,10 @@ export const useSoundcloudPlayer = () => {
         try {
             const res = await scApi(`/playlists/${playlist.id}`, {}, { silent: true });
             if (!res.ok) { setExpandedPlaylist(null); return; }
-            const data = await res.json() as { tracks?: any[]; title?: string };
+            const data = await res.json() as { tracks?: SoundcloudApiItem[]; title?: string };
             const tracks: SoundcloudPlaylist[] = (data.tracks || [])
-                .filter((t: any) => t?.permalink_url)
-                .map((t: any) => ({
+                .filter(hasPermalink)
+                .map((t) => ({
                     id: Number(t.id),
                     title: t.title || "Track",
                     permalink_url: t.permalink_url,
@@ -1223,6 +1245,7 @@ export const useSoundcloudPlayer = () => {
             uri: loadedUrl,
             title: "Sin reproduccion",
             artist: "Carga un track de SoundCloud",
+            artistNames: ["Carga un track de SoundCloud"],
             durationMs: 0,
             duration: "0:00",
             albumArt: fallbackAlbumArt,

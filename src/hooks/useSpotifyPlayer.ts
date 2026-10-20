@@ -55,7 +55,7 @@ interface SpotifyTokenError {
 
 interface OAuthPopupMessage {
     type?: string;
-    code?: string;
+    code?: string | null;
     state?: string | null;
     error?: string;
 }
@@ -1017,11 +1017,11 @@ export const useSpotifyPlayer = () => {
             }
             if (!response.ok) return;
             const data = (await response.json()) as SpotifyRecommendationsResponse;
-            const pick = getSmartShuffleCandidate(data.tracks || [], track.id);
-            if (!pick?.uri) return;
+            const pickUri = getSmartShuffleCandidate(data.tracks || [], track.id)?.uri;
+            if (!pickUri) return;
             await executeWithDeviceRecovery((deviceId) =>
                 api(
-                    `/me/player/queue?uri=${encodeURIComponent(pick.uri)}&device_id=${deviceId}`,
+                    `/me/player/queue?uri=${encodeURIComponent(pickUri)}&device_id=${deviceId}`,
                     { method: "POST" },
                     { silent: true }
                 )

@@ -55,7 +55,6 @@ export const useAudioAnalyser = (platform: AudioPlatform) => {
             streamRef.current = null;
             if (captureActiveRef.current) { setCaptureActive(false); captureActiveRef.current = false; }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [platform]);
 
     const requestYouTubeCapture = useCallback(async () => {
