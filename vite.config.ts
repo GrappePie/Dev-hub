@@ -24,4 +24,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vendor code changes rarely, so keeping it apart lets browsers cache it across deploys.
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
+          if (/[\\/]node_modules[\\/]@tanstack[\\/]/.test(id)) return "tanstack";
+          if (/[\\/]node_modules[\\/]gsap[\\/]/.test(id)) return "gsap";
+        },
+      },
+    },
+  },
 });
