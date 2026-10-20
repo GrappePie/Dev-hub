@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import useRetroSfx from "@/hooks/useRetroSfx";
 import { usePlatformTheme } from "@/hooks/usePlatformTheme";
 import { usePlatformSearch } from "@/hooks/usePlatformSearch";
+import { useSessionTransitions } from "@/hooks/useSessionTransitions";
 import { useYoutubeKeyboardShortcuts } from "@/hooks/useYoutubeKeyboardShortcuts";
 import {
     getStoredPlatform,
@@ -115,11 +116,7 @@ const Index = () => {
         });
     }, [isCharacterVisible, selectedPlatform, showCharacterSelect]);
 
-    useEffect(() => {
-        if (isLoggedIn || showOAuthBridge) return;
-        if (showCharacterSelect === isCharacterVisible) return;
-        dispatch({ type: "characterTransitionStarted", visible: showCharacterSelect });
-    }, [isCharacterVisible, isLoggedIn, showCharacterSelect, showOAuthBridge]);
+    useSessionTransitions(session, dispatch, { spotifyAuthenticated: spotify.isAuthenticated, showOAuthBridge });
 
     usePlatformTheme({
         selectedPlatform,
@@ -130,11 +127,6 @@ const Index = () => {
         previewPlatform,
         backgroundVariant,
     });
-
-    useEffect(() => {
-        if (spotify.isAuthenticated === isLoggedIn) return;
-        dispatch({ type: "loginTransitionStarted", loggedIn: spotify.isAuthenticated });
-    }, [isLoggedIn, spotify.isAuthenticated]);
 
     useEffect(() => {
         const feedback = spotify.authFeedback;
