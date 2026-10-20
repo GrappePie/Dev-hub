@@ -122,6 +122,11 @@ export const useYoutubePlayer = () => {
         shuffleModeRef.current = shuffleMode;
     }, [shuffleMode]);
 
+    const volumeRef = useRef(volume);
+    useEffect(() => {
+        volumeRef.current = volume;
+    }, [volume]);
+
     const clearAuth = useCallback(() => {
         setAccessToken(null);
         setTokenExpiresAt(null);
@@ -555,6 +560,13 @@ export const useYoutubePlayer = () => {
         setStatusText("Reproducción finalizada.");
     }, [playQueueIndex, canSearch, searchVideos]);
 
+    const handleTrackEndRef = useRef(handleTrackEnd);
+    useEffect(() => {
+        handleTrackEndRef.current = handleTrackEnd;
+    }, [handleTrackEnd]);
+
+    // The player is created once per host element; volume and callbacks are read through refs
+    // so changing them never destroys the iframe (which would stop playback).
     useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
         const { PlayerState } = window.YT;
@@ -573,13 +585,8 @@ export const useYoutubePlayer = () => {
             events: {
                 onReady: () => {
                     setPlayerReady(true);
-                    player.setVolume(Math.round(volume * 100));
+                    player.setVolume(Math.round(volumeRef.current * 100));
                     setStatusText("YouTube player listo.");
-                    if (pendingTrackRef.current) {
-                        const pending = pendingTrackRef.current;
-                        pendingTrackRef.current = null;
-                        playTrack(pending);
-                    }
                 },
                 onStateChange: (event) => {
                     if (event.data === PlayerState.PLAYING) {
@@ -590,7 +597,7 @@ export const useYoutubePlayer = () => {
                         setStatusText("Pausado.");
                     } else if (event.data === PlayerState.ENDED) {
                         setIsPlaying(false);
-                        void handleTrackEnd();
+                        handleTrackEndRef.current();
                     } else if (event.data === PlayerState.BUFFERING) {
                         setStatusText("Buffering...");
                     }
@@ -606,7 +613,15 @@ export const useYoutubePlayer = () => {
             player.destroy();
             if (playerRef.current === player) playerRef.current = null;
         };
-    }, [apiReady, playerHostEl, handleTrackEnd, playTrack, volume]);
+    }, [apiReady, playerHostEl]);
+
+    // Plays a track requested before the player finished loading.
+    useEffect(() => {
+        const pending = pendingTrackRef.current;
+        if (!playerReady || !pending) return;
+        pendingTrackRef.current = null;
+        playTrack(pending);
+    }, [playerReady, playTrack]);
 
     useEffect(() => {
         if (!playerReady || !playerRef.current) return;
