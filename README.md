@@ -115,7 +115,7 @@ Los recursos que deben existir una sola vez por página son instancias a nivel d
 2. En **Settings → Secrets and variables → Actions**, crea secrets con los mismos nombres que las variables de entorno.
 3. Registra la URL publicada como redirect URI en Spotify, SoundCloud y Google.
 
-> Si el sitio se publica bajo una subruta (por ejemplo `https://<usuario>.github.io/<repo>/`), configura `base` en `vite.config.ts` y `basepath` en el router (`src/main.tsx`); si no, los assets responderán 404.
+> El workflow detecta la subruta del sitio con `actions/configure-pages` y la pasa al build como `BASE_PATH` (por ejemplo `/<repo>/` en `https://<usuario>.github.io/<repo>/`); Vite la usa como `base` y el router como `basepath`. Para generar localmente un build bajo una subruta: `BASE_PATH=/<repo>/ npm run build`.
 
 ## Seguridad
 

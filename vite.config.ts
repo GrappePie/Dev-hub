@@ -5,6 +5,8 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // GitHub Pages project sites live under /<repo>/; the deploy workflow passes that prefix.
+  base: process.env.BASE_PATH || "/",
   server: {
     host: "127.0.0.1",
     port: 5500,
