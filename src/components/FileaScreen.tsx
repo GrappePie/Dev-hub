@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useRetroSfx from "@/hooks/useRetroSfx";
 import { toast } from "@/hooks/use-toast";
+import { TimeoutError, withTimeout } from "@/lib/timeout";
 
 const OPENVERSE_API_URL = "https://api.openverse.org/v1/audio/";
 const OPENVERSE_PAGE_SIZE = 12;
+const SEARCH_TIMEOUT_MS = 15_000;
 
 type OpenverseSource = "all" | "jamendo" | "freesound" | "wikimedia_audio" | "ccmixter";
 
@@ -228,7 +230,7 @@ const FileaScreen = () => {
         setIsSearching(true);
         setSearchError(null);
 
-        void runOpenverseSearch(query, searchSource, controller.signal)
+        void withTimeout(controller.signal, SEARCH_TIMEOUT_MS, (signal) => runOpenverseSearch(query, searchSource, signal))
             .then((results) => {
                 if (controller.signal.aborted) return;
                 setSearchResults(results);
@@ -240,7 +242,11 @@ const FileaScreen = () => {
                 if (controller.signal.aborted) return;
                 console.error(error);
                 setSearchResults([]);
-                setSearchError("No se pudo consultar Openverse en este momento.");
+                setSearchError(
+                    error instanceof TimeoutError
+                        ? "Openverse no respondió a tiempo. Intenta de nuevo."
+                        : "No se pudo consultar Openverse en este momento."
+                );
             })
             .finally(() => {
                 if (controller.signal.aborted) return;
@@ -263,7 +269,7 @@ const FileaScreen = () => {
         setIsSearching(true);
         setSearchError(null);
 
-        void runArchiveSearch(query, controller.signal)
+        void withTimeout(controller.signal, SEARCH_TIMEOUT_MS, (signal) => runArchiveSearch(query, signal))
             .then((results) => {
                 if (controller.signal.aborted) return;
                 setArchiveResults(results);
@@ -275,7 +281,11 @@ const FileaScreen = () => {
                 if (controller.signal.aborted) return;
                 console.error(error);
                 setArchiveResults([]);
-                setSearchError("No se pudo consultar Internet Archive en este momento.");
+                setSearchError(
+                    error instanceof TimeoutError
+                        ? "Internet Archive no respondió a tiempo. Intenta de nuevo."
+                        : "No se pudo consultar Internet Archive en este momento."
+                );
             })
             .finally(() => {
                 if (controller.signal.aborted) return;
