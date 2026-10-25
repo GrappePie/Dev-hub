@@ -1,134 +1,51 @@
 import { snapToPixel, toHsla } from "../shared/utils";
 import type { Palette } from "../shared/types";
 
-export const drawFrogSprite = (
-    ctx: CanvasRenderingContext2D,
-    centerX: number,
-    floorY: number,
-    pixel: number,
-    jump: number,
-    t: number,
-    palette: Palette,
-    squashX = 1,
-    squashY = 1
+// Each cell is one whole pixel unit. Poses change cells, never stretch the art.
+const drawCritter = (
+    ctx: CanvasRenderingContext2D, centerX: number, floorY: number,
+    pixel: number, jump: number, t: number, rabbit: boolean,
+    squashY: number,
 ) => {
-    const x = snapToPixel(centerX, pixel);
-    const y = snapToPixel(floorY - jump, pixel);
-
-    if (squashX !== 1 || squashY !== 1) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(squashX, squashY);
-        ctx.translate(-x, -y);
-    }
-    const bodyW = pixel * 8;
-    const bodyH = pixel * 3;
-    const bodyX = x - bodyW / 2;
-    const bodyY = y - bodyH;
-    const crouched = jump > pixel * 2;
-    const blink = Math.sin(t * 6.5 + x * 0.03) > 0.92;
-    const frogBody  = "140 55% 32%";
-    const frogLight = "140 50% 48%";
-    const frogEye   = "90 60% 72%";
-    const frogMouth = "0 65% 45%";
-    const frogDark  = "240 25% 10%";
-
-    ctx.fillStyle = toHsla(frogBody, 0.88);
-    ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
-    ctx.fillRect(bodyX + pixel, bodyY - pixel, bodyW - pixel * 2, pixel);
-
-    ctx.fillStyle = toHsla(frogEye, 0.9);
-    ctx.fillRect(bodyX + pixel, bodyY - pixel * 2, pixel * 2, pixel);
-    ctx.fillRect(bodyX + bodyW - pixel * 3, bodyY - pixel * 2, pixel * 2, pixel);
-
-    if (blink) {
-        ctx.fillStyle = toHsla(frogDark, 0.95);
-        ctx.fillRect(bodyX + pixel, bodyY - pixel, pixel * 2, pixel);
-        ctx.fillRect(bodyX + bodyW - pixel * 3, bodyY - pixel, pixel * 2, pixel);
-    } else {
-        ctx.fillStyle = toHsla("0 0% 96%", 0.9);
-        ctx.fillRect(bodyX + pixel, bodyY - pixel, pixel, pixel);
-        ctx.fillRect(bodyX + bodyW - pixel * 2, bodyY - pixel, pixel, pixel);
-        ctx.fillStyle = toHsla(frogDark, 0.9);
-        ctx.fillRect(bodyX + pixel, bodyY - pixel, pixel, pixel);
-        ctx.fillRect(bodyX + bodyW - pixel * 2, bodyY - pixel, pixel, pixel);
-    }
-
-    ctx.fillStyle = toHsla(frogMouth, 0.58);
-    ctx.fillRect(bodyX + bodyW / 2 - pixel, bodyY + pixel, pixel * 2, pixel);
-
-    ctx.fillStyle = toHsla(frogLight, 0.92);
-    if (crouched) {
-        ctx.fillRect(bodyX + pixel * 2, y - pixel, pixel * 2, pixel);
-        ctx.fillRect(bodyX + bodyW - pixel * 4, y - pixel, pixel * 2, pixel);
-    } else {
-        ctx.fillRect(bodyX + pixel, y - pixel, pixel * 2, pixel);
-        ctx.fillRect(bodyX + bodyW - pixel * 3, y - pixel, pixel * 2, pixel);
-    }
-
-    if (squashX !== 1 || squashY !== 1) ctx.restore();
+    const airborne = jump > pixel * 2;
+    const crouch = !airborne && squashY < 0.98;
+    const blink = ((t + centerX * 0.003) % 4.6) < 0.13;
+    const rows = rabbit ? [
+        ".oo..oo.", ".op..po.", ".op..po.", ".oo..oo.",
+        ".oLLLLo.", "oLLLLLLo", "oLELLELo", ".LLnnLL.",
+        ".oLLLLo.", airborne ? "oo....oo" : ".oo..oo.",
+    ] : [
+        ".oo..oo.", "oLLooLLo", "oELooELo", ".BBBBBB.",
+        "oBHBBHBo", "oBBmmBBo", ".BLLLLB.", airborne ? "oo....oo" : "ooBBBBoo",
+    ];
+    const colors: Record<string, string> = rabbit
+        ? { o: "#655574", L: "#f6e9d4", p: "#d68ba4", E: "#29263f", n: "#c76d8b" }
+        : { o: "#203a40", L: "#c6e88c", B: "#4d9860", H: "#85c574", E: "#182f38", m: "#294d46" };
+    const x = snapToPixel(centerX, pixel) - pixel * 4;
+    const y = snapToPixel(floorY - jump, pixel) - rows.length * pixel;
+    rows.forEach((row, j) => {
+        // Compress a body row on contact; keep feet on the same ground line.
+        if (crouch && j === rows.length - 3) return;
+        const py = y + j * pixel + (crouch && j < rows.length - 3 ? pixel : 0);
+        [...row].forEach((cell, i) => {
+            if (cell === ".") return;
+            ctx.fillStyle = blink && cell === "E" ? colors.o : colors[cell];
+            ctx.fillRect(x + i * pixel, py, pixel, pixel);
+        });
+    });
 };
+
+export const drawFrogSprite = (
+    ctx: CanvasRenderingContext2D, centerX: number, floorY: number,
+    pixel: number, jump: number, t: number, _palette: Palette,
+    _squashX = 1, squashY = 1,
+) => drawCritter(ctx, centerX, floorY, pixel, jump, t, false, squashY);
 
 export const drawRabbitSprite = (
-    ctx: CanvasRenderingContext2D,
-    centerX: number,
-    floorY: number,
-    pixel: number,
-    jump: number,
-    t: number,
-    palette: Palette,
-    squashX = 1,
-    squashY = 1
-) => {
-    const x = snapToPixel(centerX, pixel);
-    const y = snapToPixel(floorY - jump, pixel);
-
-    if (squashX !== 1 || squashY !== 1) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.scale(squashX, squashY);
-        ctx.translate(-x, -y);
-    }
-    const bodyW = pixel * 6;
-    const bodyH = pixel * 4;
-    const bodyX = x - bodyW / 2;
-    const bodyY = y - bodyH;
-    const earStretch = jump > pixel * 2 ? pixel : pixel * 2;
-    const blink = Math.sin(t * 5.3 + x * 0.02) > 0.94;
-    const furMain = "0 0% 92%";
-    const furShade = "0 0% 78%";
-    const furLight = "0 0% 98%";
-    const earInner = "345 45% 78%";
-    const noseTone = "0 0% 48%";
-
-    ctx.fillStyle = toHsla(furMain, 0.95);
-    ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
-    ctx.fillStyle = toHsla(furShade, 0.92);
-    ctx.fillRect(bodyX + pixel, bodyY - pixel, bodyW - pixel * 2, pixel);
-
-    ctx.fillStyle = toHsla(furLight, 0.95);
-    ctx.fillRect(bodyX + pixel, bodyY - pixel * (2 + earStretch / pixel), pixel, pixel * (1 + earStretch / pixel));
-    ctx.fillRect(bodyX + bodyW - pixel * 2, bodyY - pixel * (2 + earStretch / pixel), pixel, pixel * (1 + earStretch / pixel));
-    ctx.fillStyle = toHsla(earInner, 0.78);
-    ctx.fillRect(bodyX + pixel, bodyY - pixel * (1 + earStretch / pixel), pixel, pixel * (earStretch / pixel));
-    ctx.fillRect(bodyX + bodyW - pixel * 2, bodyY - pixel * (1 + earStretch / pixel), pixel, pixel * (earStretch / pixel));
-
-    if (blink) {
-        ctx.fillStyle = toHsla(palette.dark, 0.9);
-        ctx.fillRect(bodyX + pixel, bodyY, pixel * 2, pixel);
-    } else {
-        ctx.fillStyle = toHsla(palette.dark, 0.95);
-        ctx.fillRect(bodyX + pixel, bodyY, pixel, pixel);
-        ctx.fillRect(bodyX + pixel * 3, bodyY, pixel, pixel);
-    }
-    ctx.fillStyle = toHsla(noseTone, 0.8);
-    ctx.fillRect(bodyX + pixel * 2, bodyY + pixel, pixel, pixel);
-
-    ctx.fillStyle = toHsla(furLight, 0.8);
-    ctx.fillRect(bodyX + bodyW, bodyY + pixel * 2, pixel, pixel);
-
-    if (squashX !== 1 || squashY !== 1) ctx.restore();
-};
+    ctx: CanvasRenderingContext2D, centerX: number, floorY: number,
+    pixel: number, jump: number, t: number, _palette: Palette,
+    _squashX = 1, squashY = 1,
+) => drawCritter(ctx, centerX, floorY, pixel, jump, t, true, squashY);
 
 export const drawPixelBird = (
     ctx: CanvasRenderingContext2D,

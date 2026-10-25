@@ -89,7 +89,7 @@ const drawAst = (
 
     ctx.save();
     ctx.translate(Math.round(ax / pixel) * pixel, Math.round(ay / pixel) * pixel);
-    ctx.rotate(rot);
+    ctx.rotate(Math.round(rot / (Math.PI / 2)) * (Math.PI / 2));
 
     ctx.fillStyle = toHsla("22 12% 30%", 1.0);
     for (const [dx, dy, dw, dh] of AST_BODY[si])
@@ -139,25 +139,29 @@ const drawPlanet = (
     ctx: CanvasRenderingContext2D,
     pcx: number, pcy: number, r: number, palette: Palette
 ) => {
-    const halo = ctx.createRadialGradient(pcx, pcy, r * 0.65, pcx, pcy, r * 2.2);
-    halo.addColorStop(0, toHsla(palette.accent, 0.06));
-    halo.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = halo;
-    ctx.fillRect(pcx - r * 2.5, pcy - r * 2.5, r * 5, r * 5);
+    const p = Math.max(2, Math.round(r / 18));
+    const cx = snapToPixel(pcx, p), cy = snapToPixel(pcy, p);
+    // Discrete bands and ordered dithering, with a stepped silhouette.
+    const ramp = ["#17223e", "#25355c", "#365780", "#528ca2", "#87b9b5"];
+    for (let y = -20; y <= 20; y++) {
+        for (let x = -29; x <= 29; x++) {
+            const nx = x * p / r, ny = y * p / r;
+            const ring = Math.hypot(nx / 1.55, ny / 0.32);
+            const body = nx * nx + ny * ny <= 1;
+            if (!body && ring > 0.88 && ring < 1.04) {
+                ctx.fillStyle = y < 0 ? "#344b68" : "#8baeb2";
+            } else if (body) {
+                const light = clamp(0.55 - nx * 0.25 - ny * 0.3, 0, 0.99);
+                const band = Math.floor(light * 4 + ((x + y) % 2 === 0 ? 0.3 : 0));
+                ctx.fillStyle = ramp[Math.min(4, band)];
+            } else continue;
+            ctx.fillRect(cx + x * p, cy + y * p, p, p);
+        }
+    }
+    // A few bright atmosphere pixels on the lit rim.
+    ctx.fillStyle = toHsla(palette.accent, 0.65);
+    ctx.fillRect(cx - p * 7, cy - Math.round(r / p) * p, p * 4, p);
 
-    const body = ctx.createRadialGradient(pcx - r * 0.3, pcy - r * 0.35, r * 0.04, pcx, pcy, r);
-    body.addColorStop(0,    "hsla(200,55%,42%,0.92)");
-    body.addColorStop(0.55, "hsla(230,48%,22%,0.94)");
-    body.addColorStop(1,    "hsla(245,42%,10%,0.96)");
-    ctx.fillStyle = body;
-    ctx.beginPath(); ctx.arc(pcx, pcy, r, 0, Math.PI * 2); ctx.fill();
-
-    ctx.save(); ctx.translate(pcx, pcy); ctx.scale(1, 0.26);
-    ctx.strokeStyle = "hsla(195,40%,60%,0.22)"; ctx.lineWidth = r * 0.11;
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = "hsla(195,38%,55%,0.14)"; ctx.lineWidth = r * 0.08;
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.56, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
 };
 
 // ── X-Wing: viewed from behind, nose pointing into screen (Star Fox style) ─

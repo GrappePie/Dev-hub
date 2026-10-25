@@ -1,0 +1,23 @@
+{
+  "tool": "image_gen built-in",
+  "reference": "src/assets/arcade-convertible-generated-v1.png (original generated design only)",
+  "assets": [
+    "src/assets/arcade-convertible-body-v2.png",
+    "src/assets/arcade-convertible-occupants-v2.png",
+    "src/assets/arcade-convertible-hair-v2.png"
+  ],
+  "prompts": [
+    [
+      "body",
+      "Rebuild this ORIGINAL generated convertible as a clean EMPTY CAR layer for a layered pixel-art game sprite. Reference only the supplied generated car design, preserve its red body shape, black tires, double round rear lights, cream seats and no logos. Deliver transparent landscape1536x512 image, STRICT3 equal512x512 cells. In each cell one complete car centered with same size and ground baseline: rear-left angle, straight rear, rear-right angle. REMOVE BOTH PEOPLE COMPLETELY, including all heads, skin, clothes and hair. Restore clean empty cream seats, dark cockpit interior and windshield where the people were. No people, no hair, no driver silhouettes. Crisp detailed pixel art, same lighting and palette as reference. Entire car and mirrors visible, transparent margins, genuinely transparent background, no text, no labels."
+    ],
+    [
+      "occupants",
+      "Generate separate ORIGINAL OCCUPANT sprites for the supplied generated convertible reference, matching its sunny detailed pixel-art palette. Transparent landscape1536x1024, STRICT3 columns x2 rows of equal512x512cells, SIX isolated waist-up seated characters, seen FROM BEHIND, no car, no seats, no steering wheel, no background, no text. Top row brown-haired adult male driver wearing a blue shirt: slight rear-left, straight rear, slight rear-right. Bottom row adult blonde female passenger wearing rose-pink sleeveless top: same three rear views. All characters centered in their own cells, seated waist-up silhouettes, arms naturally forward/down toward lap, same size across views. Woman must have SHORT anchored blonde hair around crown and nape ONLY: NO long flowing ponytail, NO long loose strands, NO extended windblown ends. Her long free hair will be a separate animated layer. Clean transparent cutout, hard pixel clusters matching reference, warm light upper left, no blur, no photorealism, no accessories or logos."
+    ],
+    [
+      "hair",
+      "Create an ORIGINAL separate HAIR ANIMATION SPRITESHEET for the blonde passenger in the supplied generated pixel-art convertible. Transparent landscape1536x1024, STRICT3 columns x2 rows = SIX equal512x512cells, one isolated golden-blonde long hair section in each cell. ONLY flowing hair locks, no face, no head, no body, no car, no scenery, no text. Each lock ROOT is at LEFT, tapering irregular pointed ENDS extend to RIGHT, seen from behind at slight angle, matching warm honey-gold/copper pixel shading of reference. All six hair sprites same scale, same root anchor, same general shape, generous transparent margins. Reading order is a seamless six-frame wind cycle: gentle downward arch, lifting tips, high upward tips, relaxing curve, downward flutter, neutral return. Root must stay compact and fixed while tips clearly change shape, realistic flowing connected locks, not six identical static hair blobs. Restrained crisp pixel clusters, warm sunlight upper left, genuinely transparent alpha, no painted background. These are layered overlay sprites for a seated blonde adult woman, so root should blend into her blonde crown, tips blow toward the right."
+    ]
+  ]
+}

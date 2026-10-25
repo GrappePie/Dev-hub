@@ -1,0 +1,14 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fondos · Dev Hub</title>
+<style>body{margin:0;background:#111526;color:#ece4cc;font:14px monospace;padding:24px}h1{font-size:20px}main{display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr))}section{min-width:0}canvas{width:100%;image-rendering:pixelated;border:2px solid #66728f;box-sizing:border-box}p{color:#aebbd0}</style>
+<h1>DEV HUB / BG FX</h1><p>Escenas reales del reproductor · vista de revisión</p><p><a style="color:#8ed8ed" href="/scripts/outrun-preview.html">Ver GRID: ruta arcade y sus tres biomas</a></p><main></main>
+<script type="module">
+import {drawArcadeGrid} from '/src/components/backgrounds/arcade/scene.ts';
+import {drawStarfieldShooter} from '/src/components/backgrounds/starfield/scene.ts';
+import {drawCritterParade} from '/src/components/backgrounds/hop/scene.ts';
+import {createCritterState} from '/src/components/backgrounds/shared/types.ts';
+import {createStar} from '/src/components/backgrounds/shared/utils.ts';
+const palette={primary:'45 100% 55%',accent:'140 60% 40%',dark:'240 25% 14%',border:'45 60% 45%',danger:'0 80% 55%'};
+const state=createCritterState(),stars=Array.from({length:100},createStar);
+const scenes=['GRID','STAR','HOP'].map(name=>{const section=document.createElement('section');const label=document.createElement('h2');label.textContent=name;const canvas=document.createElement('canvas');canvas.width=780;canvas.height=900;section.append(label,canvas);document.querySelector('main').append(section);return canvas.getContext('2d')});
+let last=0,time=0;function frame(now){if(now-last<1000/30){requestAnimationFrame(frame);return}const dt=last?Math.min((now-last)/1000,.05):.033;last=now;time+=dt;scenes.forEach(ctx=>{ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,780,900)});drawArcadeGrid(scenes[0],780,900,time,.3,.6,true,palette);drawStarfieldShooter(scenes[1],780,900,time,.3,.6,true,palette,stars);drawCritterParade(scenes[2],780,900,time,dt,.3,.6,true,palette,state,null,120,1);requestAnimationFrame(frame)}requestAnimationFrame(frame);
+</script></html>

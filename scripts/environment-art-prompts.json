@@ -1,0 +1,39 @@
+{
+  "tool": "image_gen built-in",
+  "assets": [
+    [
+      "nature",
+      "src/assets/arcade-nature-generated-v1.png"
+    ],
+    [
+      "traffic",
+      "src/assets/arcade-traffic-generated-v1.png"
+    ],
+    [
+      "scenery",
+      "src/assets/arcade-scenery-generated-v1.png"
+    ],
+    [
+      "water",
+      "src/assets/arcade-water-generated-v1.png"
+    ]
+  ],
+  "prompts": [
+    [
+      "nature",
+      "Original cohesive pixel art game ASSET ATLAS for a sunny 1980s pseudo-3D arcade driving game. Transparent background, landscape 1536x1024, STRICT 4 columns x 2 rows = EIGHT equal cells of 384x512, no labels or grid. One complete isolated object per cell, centered, aligned ground at same bottom margin, generous transparent gutters, nothing touching another cell. Row 1 left-to-right: tall elegant curved tropical palm tree with lush drooping individual fronds and textured tapered trunk; dense layered evergreen pine; broadleaf summer oak tree with organic rounded branching canopy and visible brown trunk; branching saguaro cactus. Row 2: dense flowering green shrub with tiny magenta and yellow flowers; sunlit ochre desert boulder cluster; low wildflower/grass clump; small colorful turquoise wooden beach kiosk with coral striped awning and surfboard leaning beside it, no text. Match a detailed original red pixel-art convertible: clean crisp stepped silhouette, carefully grouped pixel clusters, upper left warm sunlight, cool colored shadows, rich but restrained arcade palette. Objects should read well when scaled to 30-120 pixels tall. No vector look, no blurry painting, no backgrounds, no floor panels, no cast shadows outside objects, no lettering, no copied existing game assets. Genuine transparent alpha."
+    ],
+    [
+      "traffic",
+      "Original pixel-art TRAFFIC SPRITE ATLAS, transparent background, landscape1536x1024, STRICT 3 columns x2 rows SIX equal512x512cells. All vehicles are viewed DIRECTLY FROM BEHIND at the same low chase-camera angle, rear bumper and tires visible, centered in their own cell, entire sprite fully visible with ample transparent gutters. NO front views, no side views, no perspective thumbnails, no background, no text. First row left to right: blue 1980s sports coupe; yellow compact hatchback; mint and cream camper van. Second row: ivory medium box delivery truck with metal cargo doors and taillights; red touring motorcycle with adult rider wearing a helmet and dark jacket, rear view; small orange and cream vintage minibus. Use crisp detailed hand-placed-looking pixel clusters and stepped contours, saturated sunny arcade colors matching an original detailed pixel-art red convertible. Sunlight upper left, cool shadows, readable wheels, windows, rear lamps, blank tiny plates. Vehicles must have distinct silhouettes and richly shaded bodies, not simple square block shapes. Approximate native sprites 80x60 pixels upscaled cleanly. Exactly six isolated vehicles in a uniform3x2 grid, genuine transparency, no logos, no copied commercial game sprites."
+    ],
+    [
+      "scenery",
+      "Original pixel-art SCENERY ATLAS for a sunny detailed 1980s arcade road game. Genuine transparent background, landscape1536x1024, STRICT 3 columns x2 rows, exactly six equal512x512cells with generous transparent gutters. Row1: three DIFFERENT isolated broad cumulus cloud BANKS, fluffy organic stepped contours, white sunlit tops, cream midtones and pale blue violet undersides, horizontal silhouette, no sky. Row2: three isolated HORIZON PANORAMA strips: left tropical green coastal island cliffs; middle rust ochre desert mesas and layered buttes; right blue-green alpine mountain range with dark conifers at base and a few snowy peaks. All three panorama strips have flat opaque lower edge, transparent above ridge skyline, wide horizontal silhouette fully inside their cell with generous margins. DO NOT make a full background scene, only isolated cloud banks and mountain silhouettes. Crisp coherent pixel clusters and hard stepped silhouettes matching a richly shaded original pixel-art red convertible. Limited intentional palette, warm light upper left and cool distant atmospheric shadows. No blur, no text, no grid, no stars, no roads, no cars, no logos. All six assets separate and clearly centered in the3x2 equal grid."
+    ],
+    [
+      "water",
+      "Create a GAME READY seamless animated ocean WATER TEXTURE ATLAS, original pixel art, square1024x1024, STRICT2x2 equal square512x512cells, four sequential animation frames in reading order. OPAQUE texture filling each cell edge to edge with no borders or gutters, NO TEXT, no labels. Same near-horizontal 1980s arcade tropical turquoise sea texture in all four frames: deep teal lower ripples, turquoise cyan main water, small pale aqua and ivory sunlight glints, narrow delicate white horizontal foam wavelets. Quiet horizontally stretched wave patterns, not round scales or rocks. No horizon, no sky, no land, no objects, no large white foamy areas. Each cell must tile seamlessly in x and y, and the FOUR frames must be nearly identical with subtly shifted waves and sparkle for a smooth loop. Fine crisp square pixels and grouped colors, no smooth gradients, no photorealism, no blur. A detailed sunny arcade palette matching original pixel-art convertible and palm assets. Only the2x2 opaque seamless animated turquoise water texture atlas."
+    ]
+  ]
+}

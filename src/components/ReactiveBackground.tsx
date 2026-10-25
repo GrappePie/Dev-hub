@@ -15,6 +15,9 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     // Plain object tweened by GSAP each frame — read inside the rAF loop
     const sceneRef = useRef({ motionBoost: isPlaying ? 1 : 0.42 });
+    const animationTimeRef = useRef(0);
+    const roadTravelRef = useRef(0);
+    const cameraRef = useRef({ x: 0, y: 0, targetX: 0, targetY: 0 });
     const starsRef = useRef<Star[]>([]);
     const runnerStateRef = useRef<RunnerState>(createRunnerState());
     const critterStateRef = useRef<CritterState>(createCritterState());
@@ -130,15 +133,34 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
         refreshPalette(palette);
         resize();
         window.addEventListener("resize", resize);
+        const pointCamera = (event: PointerEvent) => {
+            if (event.pointerType !== "mouse" || reduceMotion) return;
+            cameraRef.current.targetX = event.clientX / Math.max(1, width) * 2 - 1;
+            cameraRef.current.targetY = event.clientY / Math.max(1, height) * 2 - 1;
+        };
+        const centerCamera = () => {
+            cameraRef.current.targetX = 0;
+            cameraRef.current.targetY = 0;
+        };
+        window.addEventListener("pointermove", pointCamera, { passive: true });
+        window.addEventListener("blur", centerCamera);
 
         const draw = (timestamp: number) => {
+            // Limit redraws to 30fps; time-based simulation remains refresh-rate independent.
+            if (lastFrameTime && timestamp - lastFrameTime < 1000 / 30) {
+                rafId = window.requestAnimationFrame(draw);
+                return;
+            }
             frameCount += 1;
             if (frameCount % 90 === 0) refreshPalette(palette);
             if (!lastFrameTime) lastFrameTime = timestamp;
             const dt = clamp((timestamp - lastFrameTime) / 1000, 0.001, 0.05);
             lastFrameTime = timestamp;
 
-            const t = timestamp * 0.001;
+            // Keep scene time across effect restarts so playback preserves the pose.
+            if (!reduceMotion) animationTimeRef.current += dt;
+            const t = animationTimeRef.current;
+            if (!reduceMotion) roadTravelRef.current += dt * (0.04 + sceneRef.current.motionBoost * (0.08 + volumeRef.current * 0.38));
             const progressNorm = clamp(progressRef.current / 100, 0, 1);
             const volumeNorm = clamp(volumeRef.current, 0, 1);
 
@@ -150,8 +172,12 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
 
             ctx.clearRect(0, 0, width, height);
 
+            const camera = cameraRef.current;
+            const lag = 1 - Math.exp(-dt * 5);
+            camera.x += (camera.targetX - camera.x) * lag;
+            camera.y += (camera.targetY - camera.y) * lag;
             if (variant === "arcadeGrid") {
-                drawArcadeGrid(ctx, width, height, t, progressNorm, volumeNorm, isPlaying, palette);
+                drawArcadeGrid(ctx, width, height, t, progressNorm, volumeNorm, isPlaying, palette, roadTravelRef.current, camera);
             } else if (variant === "starfieldShooter") {
                 drawStarfieldShooter(ctx, width, height, t, progressNorm, volumeNorm, isPlaying, palette, starsRef.current);
             } else {
@@ -186,7 +212,7 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
             ctx.fillStyle = vignette;
             ctx.fillRect(0, 0, width, height);
 
-            if (reduceMotion && !isPlaying) return;
+            if (reduceMotion) return;
             rafId = window.requestAnimationFrame(draw);
         };
 
@@ -203,6 +229,8 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
         return () => {
             window.cancelAnimationFrame(rafId);
             window.removeEventListener("resize", resize);
+            window.removeEventListener("pointermove", pointCamera);
+            window.removeEventListener("blur", centerCamera);
         };
     }, [enabled, isPlaying, variant, transitionActive]);
 
