@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import gsap from "gsap";
 import { AudioWaveform } from "pixelarticons/react/AudioWaveform";
 import PixelIcon from "@/components/PixelIcon";
@@ -44,7 +44,7 @@ const Visualizer = ({
         });
     }, [analyser]);
 
-    const paintBars = (values: number[]) => {
+    const paintBars = useCallback((values: number[]) => {
         for (let i = 0; i < BAR_COUNT; i++) {
             const el = barsRef.current[i];
             if (!el) continue;
@@ -58,7 +58,7 @@ const Visualizer = ({
                         ? "hsl(var(--primary))"
                         : "hsl(var(--accent))";
         }
-    };
+    }, [isPlaying]);
 
     // Main audio loop — direct DOM updates, zero React re-renders
     useEffect(() => {
@@ -112,7 +112,7 @@ const Visualizer = ({
 
         rafRef.current = requestAnimationFrame(tick);
         return stop;
-    }, [isPlaying, analyser, binRanges]);
+    }, [isPlaying, analyser, binRanges, paintBars]);
 
     // Beat pop — rAF-based check, GSAP for the visual pop
     useEffect(() => {

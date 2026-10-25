@@ -44,6 +44,20 @@ const Index = () => {
     const spotify = useSpotifyPlayer();
     const soundcloud = useSoundcloudPlayer();
     const youtube = useYoutubePlayer();
+    const spotifyClearSearchResults = spotify.clearSearchResults;
+    const spotifyLogout = spotify.logout;
+    const spotifyStartLogin = spotify.startLogin;
+    const spotifySearchAndPlay = spotify.searchAndPlay;
+    const spotifySearchCatalog = spotify.searchCatalog;
+    const spotifyQueue = spotify.queue;
+    const soundcloudClearSearchResults = soundcloud.clearSearchResults;
+    const soundcloudReset = soundcloud.reset;
+    const soundcloudSearchAndPlay = soundcloud.searchAndPlay;
+    const soundcloudSearchCatalog = soundcloud.searchCatalog;
+    const youtubeClearSearchResults = youtube.clearSearchResults;
+    const youtubeReset = youtube.reset;
+    const youtubeSearchAndPlay = youtube.searchAndPlay;
+    const youtubeSearchCatalog = youtube.searchCatalog;
     const sfx = useRetroSfx();
     const [oauthReturnDetected] = useState(() => {
         const params = new URLSearchParams(window.location.search);
@@ -200,13 +214,13 @@ const Index = () => {
             setLibraryOpen(false);
             setDevicesOpen(false);
             setSearchQuery("");
-            spotify.clearSearchResults();
-            soundcloud.clearSearchResults();
-            youtube.clearSearchResults();
+            spotifyClearSearchResults();
+            soundcloudClearSearchResults();
+            youtubeClearSearchResults();
         };
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [soundcloud.clearSearchResults, spotify.clearSearchResults, youtube.clearSearchResults]);
+    }, [soundcloudClearSearchResults, spotifyClearSearchResults, youtubeClearSearchResults]);
 
     useYoutubeKeyboardShortcuts(youtube, isYouTubeMode, youtubeVolumeBeforeMuteRef);
 
@@ -220,7 +234,7 @@ const Index = () => {
             setPendingCharacterState(null);
         }
         if (pendingModeActivation === "soundcloud") {
-            youtube.reset();
+            youtubeReset();
             setSoundcloudMode(true);
             setYoutubeMode(false);
             setMixyMode(false);
@@ -236,7 +250,7 @@ const Index = () => {
             return;
         }
         if (pendingModeActivation === "youtube") {
-            soundcloud.reset();
+            soundcloudReset();
             setSoundcloudMode(false);
             setYoutubeMode(true);
             setMixyMode(false);
@@ -252,7 +266,7 @@ const Index = () => {
             return;
         }
         if (pendingModeDeactivation === "soundcloud") {
-            soundcloud.reset();
+            soundcloudReset();
             setSoundcloudMode(false);
             setYoutubeMode(false);
             setLibraryOpen(false);
@@ -263,7 +277,7 @@ const Index = () => {
             return;
         }
         if (pendingModeDeactivation === "youtube") {
-            youtube.reset();
+            youtubeReset();
             setYoutubeMode(false);
             setSoundcloudMode(false);
             setLibraryOpen(false);
@@ -272,7 +286,7 @@ const Index = () => {
             setIsAuthRedirecting(false);
             setPendingModeDeactivation(null);
         }
-    }, [pendingCharacterState, pendingModeActivation, pendingModeDeactivation, pendingState, soundcloud.reset, youtube.reset]);
+    }, [pendingCharacterState, pendingModeActivation, pendingModeDeactivation, pendingState, soundcloudReset, youtubeReset]);
 
     const onLoginToggle = useCallback(() => {
         if (isFileaMode) {
@@ -307,7 +321,7 @@ const Index = () => {
             setLibraryOpen(false);
             setDevicesOpen(false);
             setSearchQuery("");
-            spotify.clearSearchResults();
+            spotifyClearSearchResults();
             setSoundcloudMode(false);
             setYoutubeMode(false);
             setFileaMode(false);
@@ -316,7 +330,7 @@ const Index = () => {
             setPendingModeDeactivation(null);
             setIsAuthRedirecting(false);
             setShowCharacterSelect(true);
-            spotify.logout();
+            spotifyLogout();
             return;
         }
         setIsAuthRedirecting(false);
@@ -327,7 +341,7 @@ const Index = () => {
         setPendingModeActivation(null);
         setPendingModeDeactivation(null);
         setShowCharacterSelect(true);
-    }, [isFileaMode, isMixyMode, isSoundcloudMode, isYouTubeMode, spotify.clearSearchResults, spotify.isAuthenticated, spotify.logout]);
+    }, [isFileaMode, isMixyMode, isSoundcloudMode, isYouTubeMode, spotifyClearSearchResults, spotify.isAuthenticated, spotifyLogout]);
 
     const onPlatformSelect = useCallback(
         (platform: PlatformId) => {
@@ -336,7 +350,7 @@ const Index = () => {
             if (platform !== "spotify") {
                 if (platform === "soundcloud") {
                     if (isMixyMode) {
-                        youtube.reset();
+                        youtubeReset();
                         setPendingModeActivation(null);
                         setPendingModeDeactivation(null);
                         setSoundcloudMode(true);
@@ -358,7 +372,7 @@ const Index = () => {
                 }
                 if (platform === "youtube") {
                     if (isMixyMode) {
-                        soundcloud.reset();
+                        soundcloudReset();
                         setPendingModeActivation(null);
                         setPendingModeDeactivation(null);
                         setSoundcloudMode(false);
@@ -382,8 +396,8 @@ const Index = () => {
                     sfx("coin");
                     setPendingModeActivation(null);
                     setPendingModeDeactivation(null);
-                    soundcloud.reset();
-                    youtube.reset();
+                    soundcloudReset();
+                    youtubeReset();
                     setSoundcloudMode(false);
                     setYoutubeMode(false);
                     setFileaMode(true);
@@ -416,15 +430,15 @@ const Index = () => {
             sfx("coin");
             setPendingModeActivation(null);
             setPendingModeDeactivation(null);
-            soundcloud.reset();
-            youtube.reset();
+            soundcloudReset();
+            youtubeReset();
             setSoundcloudMode(false);
             setYoutubeMode(false);
             setFileaMode(false);
             setMixyMode(false);
             setIsAuthRedirecting(true);
             setShowCharacterSelect(true);
-            void spotify.startLogin().catch(() => {
+            void spotifyStartLogin().catch(() => {
                 setIsAuthRedirecting(false);
                 toast({
                     variant: "destructive",
@@ -433,7 +447,7 @@ const Index = () => {
                 });
             });
         },
-        [isMixyMode, sfx, soundcloud.reset, spotify.startLogin, youtube.reset]
+        [isMixyMode, sfx, soundcloudReset, spotifyStartLogin, youtubeReset]
     );
 
     const onLibraryToggle = useCallback(() => {
@@ -468,15 +482,15 @@ const Index = () => {
 
     const onSearchSubmit = useCallback(() => {
         if (isSoundcloudMode) {
-            void soundcloud.searchAndPlay(searchQuery);
+            void soundcloudSearchAndPlay(searchQuery);
             return;
         }
         if (isYouTubeMode) {
-            void youtube.searchAndPlay(searchQuery);
+            void youtubeSearchAndPlay(searchQuery);
             return;
         }
-        void spotify.searchAndPlay(searchQuery);
-    }, [isSoundcloudMode, isYouTubeMode, searchQuery, soundcloud.searchAndPlay, spotify.searchAndPlay, youtube.searchAndPlay]);
+        void spotifySearchAndPlay(searchQuery);
+    }, [isSoundcloudMode, isYouTubeMode, searchQuery, soundcloudSearchAndPlay, spotifySearchAndPlay, youtubeSearchAndPlay]);
 
     const handleSpotifyArtistClick = useCallback(async (name: string) => {
         if (!name) return;
@@ -525,9 +539,9 @@ const Index = () => {
 
     const searchMixyProviders = useCallback(async (query: string) => {
         const [youtubeTracks, spotifyResults, soundcloudTracks] = await Promise.all([
-            youtube.searchCatalog(query),
-            spotify.isAuthenticated ? spotify.searchCatalog(query) : Promise.resolve({ tracks: [], albums: [], artists: [] }),
-            soundcloud.isAuthenticated ? soundcloud.searchCatalog(query) : Promise.resolve([]),
+            youtubeSearchCatalog(query),
+            spotify.isAuthenticated ? spotifySearchCatalog(query) : Promise.resolve({ tracks: [], albums: [], artists: [] }),
+            soundcloud.isAuthenticated ? soundcloudSearchCatalog(query) : Promise.resolve([]),
         ]);
         return [
             ...(spotifyResults?.tracks || []).map((track) => ({
@@ -546,7 +560,7 @@ const Index = () => {
                 durationMs: track.duration_ms || 0, offsetMs: 0, available: soundcloud.sdkReady,
             })),
         ] satisfies MixySearchCandidate[];
-    }, [soundcloud.isAuthenticated, soundcloud.searchCatalog, spotify.isAuthenticated, spotify.searchCatalog, youtube.searchCatalog]);
+    }, [soundcloud.isAuthenticated, soundcloudSearchCatalog, soundcloud.sdkReady, spotify.isAuthenticated, spotifySearchCatalog, youtubeSearchCatalog, youtube.isReady]);
 
     const handleMixySearch = useCallback(async (query: string) => {
         await searchMixyProviders(query);
@@ -644,10 +658,10 @@ const Index = () => {
     }, [isMixyMode]);
 
     const queueById = useMemo(() => {
-        const map = new Map<string, (typeof spotify.queue)[number]>();
-        spotify.queue.forEach((track) => map.set(track.id, track));
+        const map = new Map<string, (typeof spotifyQueue)[number]>();
+        spotifyQueue.forEach((track) => map.set(track.id, track));
         return map;
-    }, [spotify.queue]);
+    }, [spotifyQueue]);
 
     const hasSearchResults =
         spotify.searchResults.tracks.length > 0 ||
@@ -1064,7 +1078,7 @@ const Index = () => {
                             spotifyConnected={spotify.isAuthenticated}
                             youtubeConnected={youtube.isReady}
                             soundcloudConnected={soundcloud.isAuthenticated}
-                            onConnectSpotify={() => void spotify.startLogin()}
+                            onConnectSpotify={() => void spotifyStartLogin()}
                             onConnectYoutube={() => void youtube.startLogin()}
                             onConnectSoundcloud={() => void soundcloud.startLogin()}
                             youtubePlayerHostRef={youtube.playerHostRef}
@@ -1080,7 +1094,7 @@ const Index = () => {
                     ) : isLoggedIn ? (
                         <PlayerScreen
                             currentTrack={spotify.currentTrack}
-                            queueTracks={spotify.queue}
+                            queueTracks={spotifyQueue}
                             isPlaying={spotify.isPlaying}
                             progress={spotify.progress}
                             volume={spotify.volume}

@@ -227,7 +227,7 @@ export const useSpotifyPlayback = ({ api, executeWithDeviceRecovery, setStatusTe
         if (currentTrack.id === prevSmartTrackIdRef.current) return;
         prevSmartTrackIdRef.current = currentTrack.id;
         void queueRecommendation(currentTrack);
-    }, [currentTrack?.id, shuffleMode, queueRecommendation]);
+    }, [currentTrack, shuffleMode, queueRecommendation]);
 
     const cycleShuffle = useCallback(async () => {
         const next = getNextShuffleMode(shuffleMode, { smart: true });

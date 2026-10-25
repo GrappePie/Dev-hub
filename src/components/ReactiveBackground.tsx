@@ -55,28 +55,30 @@ const ReactiveBackground = ({ enabled, isPlaying, progress, volume, variant, ana
 
     // Smooth motionBoost when music starts or stops
     useEffect(() => {
-        gsap.to(sceneRef.current, {
+        const scene = sceneRef.current;
+        gsap.to(scene, {
             motionBoost: isPlaying ? 1 : 0.42,
             duration: 0.7,
             ease: "power2.inOut",
             overwrite: true,
         });
-        return () => { gsap.killTweensOf(sceneRef.current); };
+        return () => { gsap.killTweensOf(scene); };
     }, [isPlaying]);
 
     // Intro/outro fade for the whole background layer
     useEffect(() => {
-        if (!wrapperRef.current) return;
+        const wrapper = wrapperRef.current;
+        if (!wrapper) return;
         if (enabled) {
             gsap.fromTo(
-                wrapperRef.current,
+                wrapper,
                 { opacity: 0 },
                 { opacity: 1, duration: 1.5, ease: "power2.out", overwrite: true }
             );
         } else {
-            gsap.to(wrapperRef.current, { opacity: 0, duration: 0.5, overwrite: true });
+            gsap.to(wrapper, { opacity: 0, duration: 0.5, overwrite: true });
         }
-        return () => { gsap.killTweensOf(wrapperRef.current); };
+        return () => { gsap.killTweensOf(wrapper); };
     }, [enabled]);
 
     useEffect(() => {

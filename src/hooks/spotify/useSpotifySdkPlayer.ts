@@ -44,6 +44,8 @@ export const useSpotifySdkPlayer = ({
     setPositionMs,
 }: UseSpotifySdkPlayerParams) => {
     const sdkAuthRecoveringRef = useRef(false);
+    const volumeRef = useRef(volume);
+    useEffect(() => { volumeRef.current = volume; }, [volume]);
     const [sdkReady, setSdkReady] = useState(false);
 
     useEffect(() => {
@@ -78,7 +80,7 @@ export const useSpotifySdkPlayer = ({
                     cb(accessTokenRef.current || "");
                 })();
             },
-            volume,
+            volume: volumeRef.current,
         });
         playerRef.current = player;
 

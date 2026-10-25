@@ -77,7 +77,7 @@ const LoginScreen = ({ onLogin, message, isLoading = false }: LoginScreenProps) 
             }, 35);
             return () => clearTimeout(timer);
         }
-    }, [textIndex]);
+    }, [textIndex, fullText.length, sfx]);
 
     return (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
