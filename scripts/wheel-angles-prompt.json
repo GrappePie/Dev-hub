@@ -1,0 +1,17 @@
+{
+  "asset": "src/assets/arcade-wheel-angles-v1.png",
+  "columns": 4,
+  "rows": 2,
+  "prompt": "Use the supplied ORIGINAL generated wheel as a design reference. Generate a transparent pixel-art game wheel TURNAROUND ATLAS, 4 columns x 2 rows, 2048x1024, eight equal square cells512x512, no labels or grid. SAME wheel in all cells: black sports rubber with block tread, silver five-spoke alloy rim, dark center hub; crisp limited-palette arcade pixel art. Each wheel has same physical diameter, same height400px, same baseliney456 and axle y256 within eachcell, centerx256. True 3D view changes, never just flatten a circle. Wheel axle horizontal, wheel upright, viewed level, no tilted/canted wheels. Reading order: top row SIDE (full circular rim), REAR THREE-QUARTER LEFT at yaw55degrees (rim on LEFT face, wide visible tread on RIGHT), ALMOST REAR LEFT yaw78degrees (thin silver rim on LEFT, tread dominant), DIRECT REAR yaw90degrees (only tread-facing upright tire, no rim visible). Bottom row mirrors direction views: SIDE opposite face, REAR THREE-QUARTER RIGHT yaw-55degrees (rim on RIGHT, tread on LEFT), ALMOST REAR RIGHT yaw-78degrees (thin rim on RIGHT, tread dominant), DIRECT REAR second identical tread-facing view. Purpose is wheels for a sports convertible seen from behind in center/left/right poses; near-rear narrow rim views especially important. Every wheel centered, stable proportions and axis, consistent tread pattern and silver five-spoke design, consistent overhead-left lighting. Spacious transparent gutters, no other objects, no vehicle, no text, no ground or shadow, no motion blur. Entire tire fully visible, straight vertically aligned, polished 16-bit style. Eight isolated wheels total.",
+  "views": [
+    "side-left",
+    "three-quarter-left",
+    "near-rear-left",
+    "rear-left",
+    "side-right",
+    "three-quarter-right",
+    "near-rear-right",
+    "rear-right"
+  ],
+  "status": "Original generated angle references; not integrated. Rotation cels for perspective views are a future step."
+}

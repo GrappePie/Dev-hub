@@ -1,0 +1,44 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Llantas · giro en ocho ángulos</title>
+<style>body{margin:24px;background:#182d3c;color:#f8e5c4;font:15px monospace}h1{font-size:22px}p{max-width:1100px;line-height:1.6}a{color:inherit}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;max-width:1200px}figure{margin:0;background:#254456;padding:12px;text-align:center}canvas{width:100%;max-width:256px;image-rendering:pixelated}figcaption{padding:8px}small{color:#c2d7df}nav{margin:20px 0}nav a{margin-right:20px}button,input{font:inherit}button{padding:10px;margin:0 8px 12px 0}label{display:inline-block;margin-right:16px}details{margin-top:8px}.strip{max-width:100%;width:100%;height:auto}summary{cursor:pointer}</style>
+<h1>LLANTAS / GIRO EN TODOS LOS ÁNGULOS</h1>
+<p>Ocho vistas, ocho cuadros por vista. Giran el rin, el costado y la banda de rodadura sobre una geometría fija. Eje, contorno y apoyo permanecen en el mismo sitio. Integradas en el convertible con máscaras independientes por llanta.</p>
+<nav><a href="/src/assets/arcade-wheel-rotation-v1.png" download="wheel-rotation-64-cels.png">DESCARGAR HOJA · 64 CUADROS</a><a href="/scripts/wheel-preview.html">PRUEBA LATERAL</a><a href="/scripts/convertible-preview.html">CONVERTIBLE</a></nav>
+<button id="play">PAUSAR</button><button id="step">SIGUIENTE CUADRO</button><button id="reverse">INVERTIR GIRO</button>
+<label>Velocidad <input id="fps" type="range" min="2" max="20" value="10"> <output id="rate">10</output> cuadros/s</label><label><input id="guides" type="checkbox"> Ejes y apoyo</label>
+<p id="status">Cargando animaciones…</p><main></main>
+<script type="module">
+import url from '/src/assets/arcade-wheel-rotation-v1.png';
+const names=['LATERAL IZQUIERDA','TRES CUARTOS IZQUIERDA','CASI TRASERA IZQUIERDA','TRASERA IZQUIERDA','LATERAL DERECHA','TRES CUARTOS DERECHA','CASI TRASERA DERECHA','TRASERA DERECHA'];
+const image=new Image();image.src=url;await image.decode();
+const views=names.map((name,row)=>{
+    const figure=document.createElement('figure'),canvas=document.createElement('canvas');canvas.width=canvas.height=256;canvas.setAttribute('aria-label',name+' animada');
+    const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+    const label=document.createElement('figcaption');label.textContent=name;
+    const details=document.createElement('details'),summary=document.createElement('summary'),strip=document.createElement('canvas');
+    summary.textContent='Ver los ocho cuadros';strip.width=1280;strip.height=160;strip.className='strip';
+    strip.getContext('2d').drawImage(image,0,row*160,1280,160,0,0,1280,160);details.append(summary,strip);
+    figure.append(canvas,label,details);document.querySelector('main').append(figure);
+    return {ctx,row};
+});
+let index=0,playing=true,direction=1,last=0;
+const button=document.querySelector('#play');
+function draw(){
+    for(const {ctx,row} of views){
+        ctx.clearRect(0,0,256,256);
+        ctx.drawImage(image,index*160,row*160,160,160,0,4,256,256);
+        if(document.querySelector('#guides').checked){
+            ctx.fillStyle='#7eabb2';ctx.fillRect(16,234,224,1);
+            ctx.fillStyle='#f4ba59';ctx.fillRect(127,124,1,16);ctx.fillRect(120,131,16,1);
+        }
+    }
+    document.querySelector('#status').textContent=`Cuadro ${index+1} / 8 · 64 cuadros en total · contorno fijo en cada vista`;
+}
+button.onclick=()=>{playing=!playing;button.textContent=playing?'PAUSAR':'REANUDAR';};
+document.querySelector('#step').onclick=()=>{playing=false;button.textContent='REANUDAR';index=(index+1)%8;draw();};
+document.querySelector('#reverse').onclick=()=>{direction*=-1;};
+document.querySelector('#fps').oninput=e=>{document.querySelector('#rate').value=e.target.value;};
+document.querySelector('#guides').onchange=draw;
+function animate(now){if(playing&&now-last>=1000/Number(document.querySelector('#fps').value)){last=now;index=(index+direction+8)%8;draw();}requestAnimationFrame(animate);}
+draw();requestAnimationFrame(animate);
+</script></html>

@@ -24,4 +24,11 @@ describe("coast and driver presentation",()=>{
         expect(turnDustStrength(35,false)).toBe(0);
         expect(Math.abs(turnDustStrength(35,true))).toBeGreaterThan(.2);
     });
+    it("keeps an outside-lane pose after lateral movement stops",()=>{
+        const near={z:2,x:100,y:180,half:140,depth:1};
+        const ahead={...near,z:3,y:140,half:80};
+        expect(laneHeading(near,ahead,0,-1)).toBeGreaterThan(.015);
+        expect(laneHeading(near,ahead,0,1)).toBeLessThan(-.015);
+        expect(laneHeading(near,ahead,0,0)).toBe(0);
+    });
 });

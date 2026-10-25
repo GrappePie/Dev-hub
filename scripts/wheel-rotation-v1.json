@@ -1,0 +1,67 @@
+{
+  "asset": "src/assets/arcade-wheel-rotation-v1.png",
+  "cell": {
+    "width": 160,
+    "height": 160
+  },
+  "columns": 8,
+  "rows": 8,
+  "framesPerView": 8,
+  "frameDurationMs": 100,
+  "pivot": [
+    80,
+    80
+  ],
+  "rotationStepDegrees": 45,
+  "views": [
+    {
+      "name": "side-left",
+      "row": 0,
+      "yawDegrees": 0,
+      "rotationDirection": 1
+    },
+    {
+      "name": "three-quarter-left",
+      "row": 1,
+      "yawDegrees": -55,
+      "rotationDirection": 1
+    },
+    {
+      "name": "near-rear-left",
+      "row": 2,
+      "yawDegrees": -78,
+      "rotationDirection": 1
+    },
+    {
+      "name": "rear-left",
+      "row": 3,
+      "yawDegrees": -90,
+      "rotationDirection": 1
+    },
+    {
+      "name": "side-right",
+      "row": 4,
+      "yawDegrees": 0,
+      "rotationDirection": -1
+    },
+    {
+      "name": "three-quarter-right",
+      "row": 5,
+      "yawDegrees": 55,
+      "rotationDirection": -1
+    },
+    {
+      "name": "near-rear-right",
+      "row": 6,
+      "yawDegrees": 78,
+      "rotationDirection": -1
+    },
+    {
+      "name": "rear-right",
+      "row": 7,
+      "yawDegrees": 90,
+      "rotationDirection": -1
+    }
+  ],
+  "validation": "Every cel in each view has identical alpha coverage. Complete tire rotation, fixed cylinder geometry. Integrated with convertible using fixed per-wheel occlusion masks."
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Llanta · animación aislada</title>
+<style>
+body{margin:24px;background:#182d3c;color:#f8e5c4;font:15px monospace}h1{font-size:22px}button,input{font:inherit}button{padding:10px;margin:0 6px 12px 0}a{color:#f8e5c4}canvas{image-rendering:pixelated;max-width:100%;height:auto}#live{width:420px;background:repeating-conic-gradient(#254456 0% 25%,#294b5e 0% 50%) 0/24px 24px;display:block;margin:16px 0}#frames{width:960px;display:block}label{display:inline-block;margin:12px 0}p{max-width:850px;line-height:1.6}
+</style>
+<h1>LLANTA / PRUEBA DE GIRO</h1>
+<p>Llanta completa: neumático, banda de rodadura y rin giran juntos. Ocho cuadros para una vuelta completa, con el eje fijo.</p>
+<button id="play">PAUSAR</button><button id="step">SIGUIENTE CUADRO</button><button id="reverse">INVERTIR GIRO</button>
+<label>Velocidad <input id="fps" type="range" min="2" max="20" value="10"> <output id="rate">10</output> cuadros/s</label>
+<canvas id="live" width="160" height="160" aria-label="Llanta animada"></canvas>
+<p id="status" aria-live="polite">Cargando llanta…</p>
+<h2>OCHO CUADROS</h2><canvas id="frames" width="1280" height="160" aria-label="Secuencia de ocho cuadros"></canvas>
+<p><a href="/scripts/convertible-preview.html">Volver al convertible</a></p>
+<script type="module">
+import wheelUrl from '/src/assets/arcade-wheel-isolated-v1.png';
+import {balancedWheelFrames} from '/src/components/backgrounds/arcade/wheelAnimation.ts';
+const size=160;
+const image=new Image();image.src=wheelUrl;await image.decode();
+const source=document.createElement('canvas');source.width=image.width;source.height=image.height;
+const sourceCtx=source.getContext('2d');sourceCtx.drawImage(image,0,0);
+const cels=balancedWheelFrames(sourceCtx.getImageData(0,0,image.width,image.height).data,image.width,image.height,size);
+const frames=cels.map(pixels=>{
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=size;
+    const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+    const data=ctx.createImageData(size,size);data.data.set(pixels);ctx.putImageData(data,0,0);
+    return canvas;
+});
+const live=document.querySelector('#live').getContext('2d');live.imageSmoothingEnabled=false;
+const strip=document.querySelector('#frames').getContext('2d');strip.imageSmoothingEnabled=false;
+frames.forEach((frame,i)=>strip.drawImage(frame,i*size,0));
+let index=0,playing=true,direction=1,last=0;
+const button=document.querySelector('#play');
+const draw=()=>{live.clearRect(0,0,size,size);live.drawImage(frames[index],0,0);document.querySelector('#status').textContent=`Cuadro ${index+1} / 8 · eje fijo`;};
+button.onclick=()=>{playing=!playing;button.textContent=playing?'PAUSAR':'REANUDAR';};
+document.querySelector('#step').onclick=()=>{playing=false;button.textContent='REANUDAR';index=(index+1)%8;draw();};
+document.querySelector('#reverse').onclick=()=>{direction*=-1;};
+document.querySelector('#fps').oninput=e=>{document.querySelector('#rate').value=e.target.value;};
+function animate(now){if(playing&&now-last>=1000/Number(document.querySelector('#fps').value)){last=now;index=(index+direction+8)%8;draw();}requestAnimationFrame(animate);}
+draw();requestAnimationFrame(animate);
+</script></html>

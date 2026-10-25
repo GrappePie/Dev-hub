@@ -6,11 +6,15 @@ export const coastalEdges = (point:RoadPoint,world:number,unit:number) => {
     const palm=point.x-point.half*1.18-Math.min(3*unit,point.half*.14);
     return {shore,shallow,palm};
 };
-export const laneHeading = (near:RoadPoint,ahead:RoadPoint,laneVelocity:number) => {
+export const laneHeading = (near:RoadPoint,ahead:RoadPoint,laneVelocity:number,lane=0) => {
     // Once the lane change is visually complete, remove its banking component.
     // The remaining pose follows the road tangent, independent of lane position.
     const lateral=Math.abs(laneVelocity)<.025?0:laneVelocity*.85;
-    const road=Math.atan2(ahead.x-near.x,Math.max(1,near.y-ahead.y))*.23;
+    // Follow the projected lane itself: its vanishing point is offset from
+    // cars in an outside lane, even when the road's centerline is straight.
+    const nearX=near.x+lane*near.half*2/3;
+    const aheadX=ahead.x+lane*ahead.half*2/3;
+    const road=Math.atan2(aheadX-nearX,Math.max(1,near.y-ahead.y))*.23;
     return Math.max(-.15,Math.min(.15,road+lateral));
 };
 export const turnDustStrength = (distance:number,playing:boolean) => {

@@ -340,16 +340,17 @@ export const drawArcadeGrid = (
             const pos = roadAt(vehicle.z);
             ctx.save();ctx.beginPath();ctx.rect(0,0,w,Math.max(0,route.clipAt(vehicle.z)));ctx.clip();
             trafficSprite(ctx, pos.x + vehicle.lane * pos.half * 2/3, pos.y,
-                unit * playerZ / vehicle.z, vehicle.kind, vehicle.color);
+                unit * playerZ / vehicle.z * (vehicle.kind==="motorbike"?.92:1.14), vehicle.kind, vehicle.color);
             ctx.restore();
         },
     }));
     entities.push({ z: playerZ, draw: () => {
         const x = near.x + traffic.playerLane * near.half * 2/3;
-        const heading=laneHeading(near,roadAt(playerZ+1.2),traffic.steering);
-        drawTurnDust(ctx,x,near.y,unit*46,t,turnDustStrength(distance,isPlaying),region.kind==="desert");
-        if (!drawConvertible(ctx, x, near.y, unit * 46, heading, t, isPlaying)) {
-            car(ctx, x, near.y, unit, t, isPlaying, heading * 8);
+        const heading=laneHeading(near,roadAt(playerZ+1.2),traffic.steering,traffic.playerLane);
+        const playerScale=.9,playerWidth=unit*46*playerScale;
+        drawTurnDust(ctx,x,near.y,playerWidth,t,turnDustStrength(distance,isPlaying),region.kind==="desert");
+        if (!drawConvertible(ctx, x, near.y, playerWidth, heading, t, isPlaying,{},distance)) {
+            car(ctx, x, near.y, unit*playerScale, t, isPlaying, heading * 8);
         }
     }});
     entities.sort((a,b) => b.z-a.z).forEach(entity => entity.draw());

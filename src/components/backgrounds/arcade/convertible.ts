@@ -2,17 +2,26 @@ import bodyUrl from "@/assets/arcade-convertible-body-v2.png";
 import occupantsUrl from "@/assets/arcade-convertible-occupants-v2.png";
 import hairUrl from "@/assets/arcade-convertible-hair-v3.png";
 import centerHairUrl from "@/assets/arcade-convertible-hair-center-v1.png";
+import wheelRotationUrl from "@/assets/arcade-wheel-rotation-v1.png";
 import {findSpriteBounds,type SpriteRect} from "./spriteBounds";
-interface Atlas {url:string;rows:number;columns?:number;roots?:{x:number;y:number}[];span?:number;image?:HTMLImageElement;frames?:SpriteRect[];failed?:boolean}
+import {rollingWheelFrame,suspensionOffset} from "./convertibleMotion";
+import {makeConvertibleLayers} from "./convertibleLayers";
+interface Atlas {url:string;rows:number;columns?:number;roots?:{x:number;y:number}[];span?:number;image?:HTMLImageElement;frames?:SpriteRect[];failed?:boolean;layers?:ReturnType<typeof makeConvertibleLayers>[];pixels?:Uint8ClampedArray;ready?:boolean}
 const body:Atlas={url:bodyUrl,rows:1};
 const people:Atlas={url:occupantsUrl,rows:2};
 const hair:Atlas={url:hairUrl,rows:2,columns:4};
 const centerHair:Atlas={url:centerHairUrl,rows:2,columns:4};
+const wheelRotation:Atlas={url:wheelRotationUrl,rows:8,columns:8};
+const rebuildBodyLayers=()=>{
+    if(body.pixels&&body.image&&body.frames)body.layers=body.frames.map((frame,column)=>
+        makeConvertibleLayers(body.pixels!,body.image!.width,frame,column,wheelRotation.ready?wheelRotation.image:undefined));
+};
 const load=(atlas:Atlas)=>{
     if(atlas.image||atlas.failed)return;
     const image=new Image();atlas.image=image;
     image.onerror=()=>{atlas.failed=true;};
     image.onload=()=>{
+        if(atlas===wheelRotation){atlas.ready=true;rebuildBodyLayers();return;}
         const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;
         const ctx=canvas.getContext("2d");if(!ctx)return;ctx.drawImage(image,0,0);
         const pixels=ctx.getImageData(0,0,image.width,image.height).data;
@@ -23,6 +32,7 @@ const load=(atlas:Atlas)=>{
             return findSpriteBounds(pixels,image.width,
                 {x:i%columns*cw+gutter,y:Math.floor(i/columns)*ch+gutter,w:cw-gutter*2,h:ch-gutter*2},atlas===hair);
         });
+        if(atlas===body){atlas.pixels=pixels;rebuildBodyLayers();}
         if(atlas===hair||atlas===centerHair){
             atlas.roots=atlas.frames.map(frame=>{
                 const limit=Math.min(frame.w,40);
@@ -50,18 +60,27 @@ const paint=(ctx:CanvasRenderingContext2D,atlas:Atlas,index:number,x:number,y:nu
     const frame=atlas.frames?.[index];if(!frame||!atlas.image)return;
     ctx.drawImage(atlas.image,frame.x,frame.y,frame.w,frame.h,Math.round(x),Math.round(y),Math.round(w),Math.round(h));
 };
-export interface ConvertibleLayers {body?:boolean;people?:boolean;hair?:boolean}
+export interface ConvertibleLayers {body?:boolean;wheels?:boolean;people?:boolean;hair?:boolean;wheelStyle?:"animated"|"original"}
 export const drawConvertible=(ctx:CanvasRenderingContext2D,cx:number,floor:number,width:number,
-    steering:number,t:number,playing:boolean,layers:ConvertibleLayers={})=>{
-    load(body);load(people);load(hair);load(centerHair);
+    steering:number,t:number,playing:boolean,layers:ConvertibleLayers={},travelDistance?:number)=>{
+    load(body);load(people);load(hair);load(centerHair);load(wheelRotation);
     const column=steering<-.015?0:steering>.015?2:1;
     const frame=body.frames?.[column];if(!frame||!body.image)return false;
     const w=Math.round(width),h=Math.round(w*frame.h/frame.w);
     const bottom=Math.round(floor),left=Math.round(cx-w/2),top=bottom-h;
     ctx.save();ctx.imageSmoothingEnabled=false;
-    if(layers.body!==false){
+    if(layers.body!==false||layers.wheels!==false){
         ctx.fillStyle="rgba(27,31,37,.4)";ctx.fillRect(Math.round(cx-w*.43),bottom-1,Math.round(w*.86),3);
-        paint(ctx,body,column,left,top,w,h);
+    }
+    // Rigid suspension motion carries every layer together; the shadow stays grounded.
+    ctx.translate(0,suspensionOffset(w,t,playing));
+    {
+        const separated=body.layers?.[column];
+        if(separated){
+            const wheelFrame=rollingWheelFrame(travelDistance??t*(playing?12:3.2));
+            if(layers.wheels!==false)ctx.drawImage(layers.wheelStyle==="original"?separated.originalWheels:separated.wheels[wheelFrame],0,0,frame.w,frame.h,left,top,w,h);
+            if(layers.body!==false)ctx.drawImage(separated.body,0,0,frame.w,frame.h,left,top,w,h);
+        }
     }
     // Characters sit behind the deck. Their image transforms never affect the car.
     const cabinBottom=bottom-h*.72;
