@@ -45,6 +45,10 @@ export const postOAuthResultToOpener = <T extends { type: string }>(message: T) 
     window.close();
 };
 
+export const assertOAuthState = (expected: string | null, received?: string | null) => {
+    if (!expected || !received || expected !== received) throw new Error("OAuth state mismatch");
+};
+
 const POPUP_WIDTH = 520;
 const POPUP_HEIGHT = 760;
 

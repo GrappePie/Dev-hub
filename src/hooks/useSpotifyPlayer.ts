@@ -11,6 +11,8 @@ import { useSpotifySession } from "@/hooks/spotify/useSpotifySession";
 import { useSpotifySessionCountdown } from "@/hooks/spotify/useSpotifySessionCountdown";
 import { formatMs, toProgressPercent } from "@/lib/format";
 
+export type { CurrentTrack, QueueTrack, ArtistData, ArtistTopTrack } from "@/types/player";
+
 export type { DeviceItem, PlaylistItem, SearchAlbumItem, SearchArtistItem, SearchResults, SearchTrackItem } from "@/lib/spotify/types";
 
 /**
@@ -94,6 +96,7 @@ export const useSpotifyPlayer = () => {
         loadPlaylists,
         ensureLibraryLoaded,
         searchCatalog,
+        fetchPlaylistTracks,
         clearSearchResults,
         searchAndPlay,
         playPreviewForTrackId,
@@ -160,6 +163,8 @@ export const useSpotifyPlayer = () => {
         volume,
         isLiked,
         progress,
+        positionMs,
+        durationMs,
         currentTime: formatMs(positionMs),
         totalTime: formatMs(durationMs || currentTrack?.durationMs || 0),
         devices,
@@ -174,6 +179,7 @@ export const useSpotifyPlayer = () => {
         logout,
         searchAndPlay,
         searchCatalog,
+        fetchPlaylistTracks,
         clearSearchResults,
         playSearchTrack,
         playPreviewForTrackId,

@@ -6,7 +6,7 @@ const PLATFORM_STORAGE_KEY = "mh_selected_platform";
 const BACKGROUND_VARIANT_STORAGE_KEY = "mh_background_variant";
 
 export const isPlatformId = (value: string): value is PlatformId =>
-    value === "spotify" || value === "youtube" || value === "soundcloud" || value === "filea";
+    value === "spotify" || value === "youtube" || value === "soundcloud" || value === "filea" || value === "mixy";
 
 export const getStoredPlatform = (): PlatformId => {
     const raw = browserStorage.getItem(PLATFORM_STORAGE_KEY);
@@ -75,6 +75,16 @@ export const PLATFORM_THEME: Record<PlatformId, Record<string, string>> = {
         "primary-bright": "0 0% 100%",
         "primary-dark": "0 0% 56%",
     },
+    mixy: {
+        primary: "326 88% 62%",
+        "primary-foreground": "240 30% 7%",
+        border: "190 72% 46%",
+        ring: "326 88% 62%",
+        accent: "190 92% 40%",
+        "accent-foreground": "190 100% 94%",
+        "primary-bright": "326 96% 76%",
+        "primary-dark": "326 68% 38%",
+    },
 };
 
 export const DEFAULT_THEME: Record<string, string> = {
@@ -93,4 +103,5 @@ export const PLATFORM_MESSAGE: Record<PlatformId, string> = {
     youtube: "Modo YouTube listo. Busca canciones y reproduce al instante.",
     soundcloud: "Modo SoundCloud listo. Conecta tu cuenta para ver tus playlists.",
     filea: "Filea ya esta en casa. Modo local en construccion.",
+    mixy: "Mixy esta online. Elige una fuente y empieza la mezcla.",
 };

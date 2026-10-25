@@ -19,24 +19,24 @@ export const useSpotifyApi = ({ accessTokenRef, refreshAccessToken }: UseSpotify
                 if (response.status === 401) {
                     const refreshed = await refreshAccessToken();
                     if (refreshed && retries > 0) {
-                        return fetchWithRetry(url, init, retries - 1, backoffMs * 1.6);
+                        return fetchWithRetry(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${accessTokenRef.current}` } }, retries - 1, backoffMs * 1.6);
                     }
                 }
                 if ((response.status === 429 || (response.status >= 500 && response.status < 600)) && retries > 0) {
                     const retryAfter = Number(response.headers.get("Retry-After") || "0");
                     await sleep(Math.max(backoffMs, retryAfter * 1000));
-                    return fetchWithRetry(url, init, retries - 1, backoffMs * 1.6);
+                    return fetchWithRetry(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${accessTokenRef.current}` } }, retries - 1, backoffMs * 1.6);
                 }
                 return response;
             } catch (error) {
                 if (retries > 0) {
                     await sleep(backoffMs);
-                    return fetchWithRetry(url, init, retries - 1, backoffMs * 1.6);
+                    return fetchWithRetry(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${accessTokenRef.current}` } }, retries - 1, backoffMs * 1.6);
                 }
                 throw error;
             }
         },
-        [refreshAccessToken]
+        [refreshAccessToken, accessTokenRef]
     );
 
     const api = useCallback(

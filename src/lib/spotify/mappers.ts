@@ -63,6 +63,7 @@ export const mapSearchResults = (data: SpotifySearchResponse): SearchResults => 
         name: track.name || "Sin título",
         artist: (track.artists || []).map((artist) => artist.name).join(", ") || "Sin artista",
         image: track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || fallbackAlbumArt,
+        durationMs: track.duration_ms || 0,
     })),
     albums: (data.albums?.items || []).map((album) => ({
         id: album.id,

@@ -40,6 +40,7 @@ interface PlayerScreenProps {
     onToggleVideoMode?: () => void;
     onTogglePipMode?: () => void;
     bpm?: number | null;
+    bpmConfidence?: number;
     beatSignal?: MutableRefObject<number>;
 }
 
@@ -76,6 +77,7 @@ const PlayerScreen = ({
                           onToggleVideoMode,
                           onTogglePipMode,
                           bpm,
+                          bpmConfidence,
                           beatSignal,
                       }: PlayerScreenProps) => {
     const activeTrack = currentTrack ?? {
@@ -112,6 +114,7 @@ const PlayerScreen = ({
                     onToggleVideoMode={onToggleVideoMode}
                     onTogglePipMode={onTogglePipMode}
                     bpm={bpm}
+                    bpmConfidence={bpmConfidence}
                     beatSignal={beatSignal}
                 />
 

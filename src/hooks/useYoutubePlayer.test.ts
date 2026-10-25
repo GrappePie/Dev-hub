@@ -11,6 +11,8 @@ vi.mock("@/lib/sdk", () => ({
 const players: FakePlayer[] = [];
 
 class FakePlayer implements YouTubePlayer {
+    unMute = vi.fn();
+    isMuted = vi.fn(() => false);
     playVideo = vi.fn();
     pauseVideo = vi.fn();
     loadVideoById = vi.fn();
@@ -85,7 +87,7 @@ describe("useYoutubePlayer", () => {
         act(() => result.current.playSearchTrack(track));
         expect(players[0].loadVideoById).not.toHaveBeenCalled();
 
-        players[0].becomeReady();
+        await act(async () => { players[0].becomeReady(); });
         expect(players).toHaveLength(1);
         expect(players[0].loadVideoById).toHaveBeenCalledWith("abc123");
     });

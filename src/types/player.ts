@@ -20,7 +20,8 @@ export interface CurrentTrack {
     uri: string;
     title: string;
     artist: string;
-    artistNames: string[];
+    artistNames?: string[];
+    videoId?: string;
     durationMs: number;
     duration: string;
     albumArt: string;
@@ -58,7 +59,7 @@ export interface PlaybackSnapshot {
 
 /** Minimal contract needed to run a debounced catalog search (Interface Segregation). */
 export interface CatalogSearch {
-    searchCatalog: (query: string) => Promise<void>;
+    searchCatalog: (query: string) => Promise<unknown>;
     clearSearchResults: () => void;
 }
 

@@ -109,6 +109,7 @@ export interface PlaylistItem {
 }
 
 export interface SearchTrackItem {
+    durationMs?: number;
     id: string;
     uri: string;
     name: string;

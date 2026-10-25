@@ -1,59 +1,216 @@
+import { loadGoogleIdentity, loadYouTubeIframeApi } from "@/lib/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
-import { clamp01, formatMs, toProgressPercent } from "@/lib/format";
-import { loadGoogleIdentity, loadYouTubeIframeApi } from "@/lib/sdk";
+import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
 import { getNextShuffleMode } from "@/lib/shuffleMode";
-import {
-    DEFAULT_VIDEO_ID,
-    GOOGLE_CLIENT_ID,
-    YOUTUBE_API_BASE,
-    YOUTUBE_API_KEY,
-    YOUTUBE_MUSIC_CATEGORY_ID,
-    YOUTUBE_SCOPE,
-} from "@/lib/youtube/config";
-import {
-    collectVideoIds,
-    getPlaylistItemVideoId,
-    getSearchResultVideoId,
-    mapCommentThreads,
-    mapCurrentTrack,
-    mapPlaylists,
-    mapQueueTrack,
-    mapVideoTracks,
-    parseIsoDuration,
-    toLibraryTrackItems,
-    toWatchUrl,
-} from "@/lib/youtube/mappers";
-import { youtubeAccountNameStore, youtubeTokenStore, youtubeVolumeStore } from "@/lib/youtube/storage";
-import type {
-    YouTubeChannel,
-    YouTubeComment,
-    YouTubeCommentThreadItem,
-    YouTubeLibraryItem,
-    YouTubeLibrarySection,
-    YouTubePagedResponse,
-    YouTubePlaylist,
-    YouTubePlaylistItem,
-    YouTubeSearchResult,
-    YouTubeSnippet,
-    YouTubeTrack,
-    YouTubeVideoDetails,
-} from "@/lib/youtube/types";
-import type { CurrentTrack } from "@/types/player";
+import useYoutubeConnect from "@/hooks/useYoutubeConnect";
+import type { ConnectPlaybackSnapshot, ConnectRemoteCommand, ConnectSessionState } from "@/lib/youtubeConnect";
+import type { CurrentTrack, QueueTrack } from "@/hooks/useSpotifyPlayer";
 
-export type { YouTubeComment, YouTubeLibraryItem, YouTubeLibrarySection };
+const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || "";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+const YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
+const YOUTUBE_SCOPE_VERSION = "2";
+const VOLUME_STORAGE_KEY = "mh_yt_vol";
+
+const STORAGE = {
+    ACCESS_TOKEN: "yt_access_token",
+    EXPIRES_AT: "yt_token_expires_at",
+    ACCOUNT_NAME: "yt_account_name",
+    SCOPE_VERSION: "yt_scope_version",
+} as const;
+
+export type YouTubeLibrarySection = "playlists" | "likes" | "watchLater";
+
+interface YouTubeSearchResult {
+    id?: { videoId?: string };
+    snippet?: {
+        title?: string;
+        channelTitle?: string;
+        thumbnails?: {
+            high?: { url?: string };
+            medium?: { url?: string };
+            default?: { url?: string };
+        };
+    };
+}
+
+interface YouTubePlaylist {
+    id?: string;
+    snippet?: {
+        title?: string;
+        channelTitle?: string;
+        thumbnails?: {
+            high?: { url?: string };
+            medium?: { url?: string };
+            default?: { url?: string };
+        };
+    };
+    contentDetails?: {
+        itemCount?: number;
+    };
+}
+
+interface YouTubePlaylistItem {
+    snippet?: {
+        title?: string;
+        channelTitle?: string;
+        videoOwnerChannelTitle?: string;
+        thumbnails?: {
+            high?: { url?: string };
+            medium?: { url?: string };
+            default?: { url?: string };
+        };
+        resourceId?: {
+            videoId?: string;
+        };
+    };
+    contentDetails?: {
+        videoId?: string;
+    };
+}
+
+interface YouTubeVideoDetails {
+    id?: string;
+    contentDetails?: {
+        duration?: string;
+    };
+}
+
+interface YouTubePagedResponse<T> {
+    items?: T[];
+    nextPageToken?: string;
+}
+
+interface YouTubeCommentSnippet {
+    authorDisplayName?: string;
+    textDisplay?: string;
+    likeCount?: number;
+    publishedAt?: string;
+}
+
+interface YouTubeCommentThreadItem {
+    id?: string;
+    snippet?: { topLevelComment?: { snippet?: YouTubeCommentSnippet } };
+}
+
+export interface YouTubeComment {
+    id: string;
+    author: string;
+    text: string;
+    likeCount: number;
+    publishedAt: string;
+}
+
+export interface YouTubeTrack {
+    id: string;
+    videoId: string;
+    uri: string;
+    title: string;
+    artist: string;
+    image: string;
+    durationMs: number;
+    duration: string;
+}
+
+interface YouTubeLibraryPlaylistItem {
+    id: string;
+    kind: "playlist";
+    playlistId: string;
+    title: string;
+    artist: string;
+    image: string;
+    trackCount: number;
+}
+
+interface YouTubeLibraryTrackItem extends YouTubeTrack {
+    kind: "track";
+}
+
+export type YouTubeLibraryItem = YouTubeLibraryPlaylistItem | YouTubeLibraryTrackItem;
 
 type YouTubeLibraryBySection = Record<YouTubeLibrarySection, YouTubeLibraryItem[]>;
 type YouTubeLibraryNextBySection = Record<YouTubeLibrarySection, string | null>;
 type YouTubeLibraryLoadingBySection = Record<YouTubeLibrarySection, boolean>;
-type YouTubeTrackSection = Exclude<YouTubeLibrarySection, "playlists">;
 
 const EMPTY_LIBRARY: YouTubeLibraryBySection = { playlists: [], likes: [], watchLater: [] };
 const EMPTY_LIBRARY_NEXT: YouTubeLibraryNextBySection = { playlists: null, likes: null, watchLater: null };
 const EMPTY_LIBRARY_LOADING: YouTubeLibraryLoadingBySection = { playlists: false, likes: false, watchLater: false };
 
-const FALLBACK_TRACK_TITLE = "YouTube Track";
-const LIBRARY_TRACK_FALLBACK_TITLE: Record<YouTubeTrackSection, string> = { likes: "Like", watchLater: "Watch Later" };
+
+const readStoredVolume = () => {
+    const raw = localStorage.getItem(VOLUME_STORAGE_KEY);
+    const parsed = raw ? Number(raw) : 0.5;
+    if (!Number.isFinite(parsed)) return 0.5;
+    return Math.max(0, Math.min(1, parsed));
+};
+
+const formatMs = (ms = 0) => {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const formatCountdown = (expiresAt: number) => {
+    const remaining = Math.max(0, expiresAt - Date.now());
+    const secs = Math.floor(remaining / 1000);
+    const mins = Math.floor(secs / 60);
+    return `${mins}:${String(secs % 60).padStart(2, "0")}`;
+};
+
+const parseIsoDuration = (value?: string) => {
+    if (!value) return 0;
+    const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+    if (!match) return 0;
+    const hours = Number(match[1] || 0);
+    const mins = Number(match[2] || 0);
+    const secs = Number(match[3] || 0);
+    return ((hours * 60 + mins) * 60 + secs) * 1000;
+};
+
+const toWatchUrl = (videoId: string) => `https://www.youtube.com/watch?v=${videoId}`;
+
+const pickThumb = (value?: { high?: { url?: string }; medium?: { url?: string }; default?: { url?: string } }) =>
+    value?.high?.url || value?.medium?.url || value?.default?.url || fallbackAlbumArt;
+
+const mapQueueTrack = (track: YouTubeTrack): QueueTrack => ({
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    duration: track.duration,
+    uri: track.uri,
+});
+
+const mapCurrentTrack = (track: YouTubeTrack): CurrentTrack => ({
+    id: track.id,
+    videoId: track.videoId,
+    artistNames: [track.artist],
+    uri: track.uri,
+    title: track.title,
+    artist: track.artist,
+    durationMs: track.durationMs,
+    duration: track.duration,
+    albumArt: track.image || fallbackAlbumArt,
+    externalUrl: track.uri,
+});
+
+const currentTrackToYouTubeTrack = (track: CurrentTrack | null): YouTubeTrack | null => {
+    if (!track) return null;
+    const videoId = track.id.startsWith("yt-") ? track.id.slice(3) : track.id;
+    if (!videoId) return null;
+    return {
+        id: `yt-${videoId}`,
+        videoId,
+        uri: track.externalUrl || toWatchUrl(videoId),
+        title: track.title,
+        artist: track.artist,
+        image: track.albumArt || fallbackAlbumArt,
+        durationMs: track.durationMs,
+        duration: track.duration,
+    };
+};
 
 export const useYoutubePlayer = () => {
     const [playerHostEl, setPlayerHostEl] = useState<HTMLDivElement | null>(null);
@@ -72,6 +229,8 @@ export const useYoutubePlayer = () => {
     const shuffleModeRef = useRef<"off" | "shuffle" | "smart">("off");
     const pendingTrackRef = useRef<YouTubeTrack | null>(null);
     const fetchedLibraryRef = useRef(false);
+    const handleTrackEndRef = useRef<() => void>(() => undefined);
+    const pendingConnectResumeRef = useRef<{ positionMs: number; isPlaying: boolean } | null>(null);
 
     const [apiReady, setApiReady] = useState(false);
     const [playerReady, setPlayerReady] = useState(false);
@@ -85,13 +244,16 @@ export const useYoutubePlayer = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [shuffleMode, setShuffleMode] = useState<"off" | "shuffle" | "smart">("off");
     const [repeatMode, setRepeatMode] = useState<0 | 1 | 2>(0);
-    const [volume, setVolume] = useState(youtubeVolumeStore.read);
+    const [volume, setVolume] = useState(readStoredVolume);
+    const volumeRef = useRef(volume);
     const [durationMs, setDurationMs] = useState(0);
     const [positionMs, setPositionMs] = useState(0);
     const [comments, setComments] = useState<YouTubeComment[]>([]);
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [showVideo, setShowVideo] = useState(false);
     const [pipMode, setPipMode] = useState(false);
+    const [currentRating, setCurrentRating] = useState<"like" | "dislike" | "none">("none");
+    const [ratingLoading, setRatingLoading] = useState(false);
 
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
@@ -122,11 +284,6 @@ export const useYoutubePlayer = () => {
         shuffleModeRef.current = shuffleMode;
     }, [shuffleMode]);
 
-    const volumeRef = useRef(volume);
-    useEffect(() => {
-        volumeRef.current = volume;
-    }, [volume]);
-
     const clearAuth = useCallback(() => {
         setAccessToken(null);
         setTokenExpiresAt(null);
@@ -135,7 +292,10 @@ export const useYoutubePlayer = () => {
         setLibraryNextBySection(EMPTY_LIBRARY_NEXT);
         setLibraryLoading(false);
         setLibraryLoadingMoreBySection(EMPTY_LIBRARY_LOADING);
-        youtubeTokenStore.clear();
+        localStorage.removeItem(STORAGE.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE.EXPIRES_AT);
+        localStorage.removeItem(STORAGE.ACCOUNT_NAME);
+        localStorage.removeItem(STORAGE.SCOPE_VERSION);
         likesPlaylistIdRef.current = null;
         watchLaterPlaylistIdRef.current = null;
         fetchedLibraryRef.current = false;
@@ -208,40 +368,29 @@ export const useYoutubePlayer = () => {
         return false;
     }, []);
 
-    /** Search and playlist endpoints omit durations, so they are fetched in one extra request before mapping. */
-    const resolveVideoTracks = useCallback(
-        async <T extends { snippet?: YouTubeSnippet }>(
-            items: T[],
-            getVideoId: (item: T) => string | undefined,
-            useAuth: boolean,
-            fallbackTitle: string
-        ) => {
-            const durationById = await fetchDurationsByVideoId(collectVideoIds(items, getVideoId), useAuth);
-            return mapVideoTracks(items, getVideoId, durationById, fallbackTitle);
+    const mapSearchResults = useCallback(
+        async (items: YouTubeSearchResult[], useAuth: boolean) => {
+            const ids = items.map((item) => item.id?.videoId).filter((value): value is string => Boolean(value));
+            const durationById = await fetchDurationsByVideoId(ids, useAuth);
+            return items
+                .map((item) => {
+                    const videoId = item.id?.videoId;
+                    if (!videoId) return null;
+                    const duration = durationById.get(videoId) || 0;
+                    return {
+                        id: `yt-${videoId}`,
+                        videoId,
+                        uri: toWatchUrl(videoId),
+                        title: item.snippet?.title || "YouTube Track",
+                        artist: item.snippet?.channelTitle || "YouTube",
+                        image: pickThumb(item.snippet?.thumbnails),
+                        durationMs: duration,
+                        duration: formatMs(duration),
+                    } satisfies YouTubeTrack;
+                })
+                .filter((item): item is YouTubeTrack => Boolean(item));
         },
         [fetchDurationsByVideoId]
-    );
-
-    const searchVideos = useCallback(
-        async (q: string, maxResults: number) => {
-            const useAuth = Boolean(accessTokenRef.current);
-            const response = await youtubeApiGet(
-                "/search",
-                {
-                    part: "snippet",
-                    type: "video",
-                    videoEmbeddable: "true",
-                    videoCategoryId: YOUTUBE_MUSIC_CATEGORY_ID,
-                    maxResults,
-                    q,
-                },
-                { auth: useAuth, includeApiKey: !useAuth, silent: true }
-            );
-            if (!response.ok) return [];
-            const data = (await response.json()) as YouTubePagedResponse<YouTubeSearchResult>;
-            return resolveVideoTracks(data.items || [], getSearchResultVideoId, useAuth, FALLBACK_TRACK_TITLE);
-        },
-        [resolveVideoTracks, youtubeApiGet]
     );
 
     const fetchSearch = useCallback(
@@ -249,9 +398,24 @@ export const useYoutubePlayer = () => {
             if (!canSearch()) return [];
             const q = query.trim();
             if (!q) return [];
-            return searchVideos(q, 20);
+            const useAuth = Boolean(accessTokenRef.current);
+            const response = await youtubeApiGet(
+                "/search",
+                {
+                    part: "snippet",
+                    type: "video",
+                    videoEmbeddable: "true",
+                    videoCategoryId: "10",
+                    maxResults: 20,
+                    q,
+                },
+                { auth: useAuth, includeApiKey: !useAuth, silent: true }
+            );
+            if (!response.ok) return [];
+            const data = (await response.json()) as YouTubePagedResponse<YouTubeSearchResult>;
+            return mapSearchResults(data.items || [], useAuth);
         },
-        [canSearch, searchVideos]
+        [canSearch, mapSearchResults, youtubeApiGet]
     );
 
     const fetchComments = useCallback(
@@ -268,7 +432,16 @@ export const useYoutubePlayer = () => {
             setCommentsLoading(false);
             if (!response.ok) return;
             const data = (await response.json()) as YouTubePagedResponse<YouTubeCommentThreadItem>;
-            setComments(mapCommentThreads(data.items || []));
+            const mapped: YouTubeComment[] = (data.items || [])
+                .map((item) => ({
+                    id: item.id || String(Math.random()),
+                    author: item.snippet?.topLevelComment?.snippet?.authorDisplayName || "Anónimo",
+                    text: item.snippet?.topLevelComment?.snippet?.textDisplay || "",
+                    likeCount: item.snippet?.topLevelComment?.snippet?.likeCount || 0,
+                    publishedAt: item.snippet?.topLevelComment?.snippet?.publishedAt || "",
+                }))
+                .filter((c) => c.text);
+            setComments(mapped);
         },
         [youtubeApiGet]
     );
@@ -279,52 +452,44 @@ export const useYoutubePlayer = () => {
         void fetchComments(videoId);
     }, [currentTrack?.id, fetchComments]);
 
-    const requestPlaylistItems = useCallback(
-        (
-            playlistId: string,
-            { maxResults = 20, useAuth = true, pageToken }: { maxResults?: number; useAuth?: boolean; pageToken?: string } = {}
-        ) =>
-            youtubeApiGet(
-                "/playlistItems",
-                { part: "snippet,contentDetails", playlistId, maxResults, ...(pageToken ? { pageToken } : {}) },
-                { auth: useAuth, includeApiKey: !useAuth, silent: true }
-            ),
-        [youtubeApiGet]
-    );
-
-    const requestMyPlaylists = useCallback(
-        (pageToken?: string) =>
-            youtubeApiGet(
-                "/playlists",
-                { part: "snippet,contentDetails", mine: "true", maxResults: 20, ...(pageToken ? { pageToken } : {}) },
-                { auth: true, includeApiKey: false, silent: true }
-            ),
-        [youtubeApiGet]
-    );
-
-    const readLibraryTrackPage = useCallback(
-        async (response: Response, section: YouTubeTrackSection) => {
-            const data = (await response.json()) as YouTubePagedResponse<YouTubePlaylistItem>;
-            const tracks = await resolveVideoTracks(
-                data.items || [],
-                getPlaylistItemVideoId,
-                true,
-                LIBRARY_TRACK_FALLBACK_TITLE[section]
-            );
-            return { items: toLibraryTrackItems(tracks), nextPageToken: data.nextPageToken || null };
-        },
-        [resolveVideoTracks]
-    );
-
     const fetchPlaylistTracks = useCallback(
         async (playlistId: string) => {
             const useAuth = Boolean(accessTokenRef.current);
-            const response = await requestPlaylistItems(playlistId, { maxResults: 50, useAuth });
+            const response = await youtubeApiGet(
+                "/playlistItems",
+                {
+                    part: "snippet,contentDetails",
+                    playlistId,
+                    maxResults: 50,
+                },
+                { auth: useAuth, includeApiKey: !useAuth, silent: true }
+            );
             if (!response.ok) return [];
             const data = (await response.json()) as YouTubePagedResponse<YouTubePlaylistItem>;
-            return resolveVideoTracks(data.items || [], getPlaylistItemVideoId, useAuth, FALLBACK_TRACK_TITLE);
+            const raw = data.items || [];
+            const ids = raw
+                .map((item) => item.contentDetails?.videoId || item.snippet?.resourceId?.videoId)
+                .filter((value): value is string => Boolean(value));
+            const durationById = await fetchDurationsByVideoId(ids, useAuth);
+            return raw
+                .map((item) => {
+                    const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                    if (!videoId) return null;
+                    const duration = durationById.get(videoId) || 0;
+                    return {
+                        id: `yt-${videoId}`,
+                        videoId,
+                        uri: toWatchUrl(videoId),
+                        title: item.snippet?.title || "YouTube Track",
+                        artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
+                        image: pickThumb(item.snippet?.thumbnails),
+                        durationMs: duration,
+                        duration: formatMs(duration),
+                    } satisfies YouTubeTrack;
+                })
+                .filter((item): item is YouTubeTrack => Boolean(item));
         },
-        [requestPlaylistItems, resolveVideoTracks]
+        [fetchDurationsByVideoId, youtubeApiGet]
     );
 
     const fetchLibrary = useCallback(async () => {
@@ -339,21 +504,48 @@ export const useYoutubePlayer = () => {
                 { auth: true, includeApiKey: false, silent: true }
             );
             if (!meResponse.ok) return;
-            const meData = (await meResponse.json()) as YouTubePagedResponse<YouTubeChannel>;
+            const meData = (await meResponse.json()) as {
+                items?: Array<{
+                    snippet?: { title?: string };
+                    contentDetails?: { relatedPlaylists?: { likes?: string; watchLater?: string } };
+                }>;
+            };
             const me = meData.items?.[0];
             const displayName = me?.snippet?.title || "";
             setAccountName(displayName);
             if (displayName) {
-                youtubeAccountNameStore.save(displayName);
+                localStorage.setItem(STORAGE.ACCOUNT_NAME, displayName);
             }
             likesPlaylistIdRef.current = me?.contentDetails?.relatedPlaylists?.likes || null;
             watchLaterPlaylistIdRef.current = me?.contentDetails?.relatedPlaylists?.watchLater || null;
 
             const [playlistsResponse, likesResponse, watchLaterResponse] = await Promise.all([
-                requestMyPlaylists(),
-                likesPlaylistIdRef.current ? requestPlaylistItems(likesPlaylistIdRef.current) : Promise.resolve(null),
+                youtubeApiGet(
+                    "/playlists",
+                    { part: "snippet,contentDetails", mine: "true", maxResults: 20 },
+                    { auth: true, includeApiKey: false, silent: true }
+                ),
+                likesPlaylistIdRef.current
+                    ? youtubeApiGet(
+                          "/playlistItems",
+                          {
+                              part: "snippet,contentDetails",
+                              playlistId: likesPlaylistIdRef.current,
+                              maxResults: 20,
+                          },
+                          { auth: true, includeApiKey: false, silent: true }
+                      )
+                    : Promise.resolve(null),
                 watchLaterPlaylistIdRef.current
-                    ? requestPlaylistItems(watchLaterPlaylistIdRef.current)
+                    ? youtubeApiGet(
+                          "/playlistItems",
+                          {
+                              part: "snippet,contentDetails",
+                              playlistId: watchLaterPlaylistIdRef.current,
+                              maxResults: 20,
+                          },
+                          { auth: true, includeApiKey: false, silent: true }
+                      )
                     : Promise.resolve(null),
             ]);
 
@@ -362,20 +554,74 @@ export const useYoutubePlayer = () => {
 
             if (playlistsResponse.ok) {
                 const data = (await playlistsResponse.json()) as YouTubePagedResponse<YouTubePlaylist>;
-                nextLibrary.playlists = mapPlaylists(data.items || []);
+                nextLibrary.playlists = (data.items || [])
+                    .filter((item) => item.id)
+                    .map((item) => ({
+                        id: `yt-playlist-${item.id}`,
+                        kind: "playlist",
+                        playlistId: item.id as string,
+                        title: item.snippet?.title || "Playlist",
+                        artist: item.snippet?.channelTitle || "YouTube",
+                        image: pickThumb(item.snippet?.thumbnails),
+                        trackCount: Number(item.contentDetails?.itemCount || 0),
+                    }));
                 nextTokens.playlists = data.nextPageToken || null;
             }
 
             if (likesResponse?.ok) {
-                const page = await readLibraryTrackPage(likesResponse, "likes");
-                nextLibrary.likes = page.items;
-                nextTokens.likes = page.nextPageToken;
+                const data = (await likesResponse.json()) as YouTubePagedResponse<YouTubePlaylistItem>;
+                const raw = data.items || [];
+                const ids = raw
+                    .map((item) => item.contentDetails?.videoId || item.snippet?.resourceId?.videoId)
+                    .filter((value): value is string => Boolean(value));
+                const durationById = await fetchDurationsByVideoId(ids, true);
+                nextLibrary.likes = raw
+                    .map((item) => {
+                        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                        if (!videoId) return null;
+                        const duration = durationById.get(videoId) || 0;
+                        return {
+                            kind: "track",
+                            id: `yt-${videoId}`,
+                            videoId,
+                            uri: toWatchUrl(videoId),
+                            title: item.snippet?.title || "Like",
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
+                            image: pickThumb(item.snippet?.thumbnails),
+                            durationMs: duration,
+                            duration: formatMs(duration),
+                        } satisfies YouTubeLibraryTrackItem;
+                    })
+                    .filter((item): item is YouTubeLibraryTrackItem => Boolean(item));
+                nextTokens.likes = data.nextPageToken || null;
             }
 
             if (watchLaterResponse?.ok) {
-                const page = await readLibraryTrackPage(watchLaterResponse, "watchLater");
-                nextLibrary.watchLater = page.items;
-                nextTokens.watchLater = page.nextPageToken;
+                const data = (await watchLaterResponse.json()) as YouTubePagedResponse<YouTubePlaylistItem>;
+                const raw = data.items || [];
+                const ids = raw
+                    .map((item) => item.contentDetails?.videoId || item.snippet?.resourceId?.videoId)
+                    .filter((value): value is string => Boolean(value));
+                const durationById = await fetchDurationsByVideoId(ids, true);
+                nextLibrary.watchLater = raw
+                    .map((item) => {
+                        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                        if (!videoId) return null;
+                        const duration = durationById.get(videoId) || 0;
+                        return {
+                            kind: "track",
+                            id: `yt-${videoId}`,
+                            videoId,
+                            uri: toWatchUrl(videoId),
+                            title: item.snippet?.title || "Watch Later",
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
+                            image: pickThumb(item.snippet?.thumbnails),
+                            durationMs: duration,
+                            duration: formatMs(duration),
+                        } satisfies YouTubeLibraryTrackItem;
+                    })
+                    .filter((item): item is YouTubeLibraryTrackItem => Boolean(item));
+                nextTokens.watchLater = data.nextPageToken || null;
             }
 
             setLibraryBySection(nextLibrary);
@@ -384,7 +630,7 @@ export const useYoutubePlayer = () => {
         } finally {
             setLibraryLoading(false);
         }
-    }, [readLibraryTrackPage, requestMyPlaylists, requestPlaylistItems, youtubeApiGet]);
+    }, [fetchDurationsByVideoId, youtubeApiGet]);
 
     const loadMoreLibrarySection = useCallback(
         async (section: YouTubeLibrarySection) => {
@@ -393,10 +639,24 @@ export const useYoutubePlayer = () => {
             setLibraryLoadingMoreBySection((prev) => ({ ...prev, [section]: true }));
             try {
                 if (section === "playlists") {
-                    const response = await requestMyPlaylists(token);
+                    const response = await youtubeApiGet(
+                        "/playlists",
+                        { part: "snippet,contentDetails", mine: "true", maxResults: 20, pageToken: token },
+                        { auth: true, includeApiKey: false, silent: true }
+                    );
                     if (!response.ok) return;
                     const data = (await response.json()) as YouTubePagedResponse<YouTubePlaylist>;
-                    const mapped = mapPlaylists(data.items || []);
+                    const mapped = (data.items || [])
+                        .filter((item) => item.id)
+                        .map((item) => ({
+                            id: `yt-playlist-${item.id}`,
+                            kind: "playlist",
+                            playlistId: item.id as string,
+                            title: item.snippet?.title || "Playlist",
+                            artist: item.snippet?.channelTitle || "YouTube",
+                            image: pickThumb(item.snippet?.thumbnails),
+                            trackCount: Number(item.contentDetails?.itemCount || 0),
+                        })) satisfies YouTubeLibraryItem[];
                     setLibraryBySection((prev) => ({ ...prev, playlists: [...prev.playlists, ...mapped] }));
                     setLibraryNextBySection((prev) => ({ ...prev, playlists: data.nextPageToken || null }));
                     return;
@@ -405,16 +665,48 @@ export const useYoutubePlayer = () => {
                 const targetPlaylistId =
                     section === "likes" ? likesPlaylistIdRef.current : watchLaterPlaylistIdRef.current;
                 if (!targetPlaylistId) return;
-                const response = await requestPlaylistItems(targetPlaylistId, { pageToken: token });
+                const response = await youtubeApiGet(
+                    "/playlistItems",
+                    { part: "snippet,contentDetails", playlistId: targetPlaylistId, maxResults: 20, pageToken: token },
+                    { auth: true, includeApiKey: false, silent: true }
+                );
                 if (!response.ok) return;
-                const page = await readLibraryTrackPage(response, section);
-                setLibraryBySection((prev) => ({ ...prev, [section]: [...prev[section], ...page.items] }));
-                setLibraryNextBySection((prev) => ({ ...prev, [section]: page.nextPageToken }));
+                const data = (await response.json()) as YouTubePagedResponse<YouTubePlaylistItem>;
+                const raw = data.items || [];
+                const ids = raw
+                    .map((item) => item.contentDetails?.videoId || item.snippet?.resourceId?.videoId)
+                    .filter((value): value is string => Boolean(value));
+                const durationById = await fetchDurationsByVideoId(ids, true);
+                const mapped = raw
+                    .map((item) => {
+                        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                        if (!videoId) return null;
+                        const duration = durationById.get(videoId) || 0;
+                        return {
+                            kind: "track",
+                            id: `yt-${videoId}`,
+                            videoId,
+                            uri: toWatchUrl(videoId),
+                            title: item.snippet?.title || (section === "likes" ? "Like" : "Watch Later"),
+                            artist: item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || "YouTube",
+                            image: pickThumb(item.snippet?.thumbnails),
+                            durationMs: duration,
+                            duration: formatMs(duration),
+                        } satisfies YouTubeLibraryTrackItem;
+                    })
+                    .filter((item): item is YouTubeLibraryTrackItem => Boolean(item));
+                if (section === "likes") {
+                    setLibraryBySection((prev) => ({ ...prev, likes: [...prev.likes, ...mapped] }));
+                    setLibraryNextBySection((prev) => ({ ...prev, likes: data.nextPageToken || null }));
+                } else {
+                    setLibraryBySection((prev) => ({ ...prev, watchLater: [...prev.watchLater, ...mapped] }));
+                    setLibraryNextBySection((prev) => ({ ...prev, watchLater: data.nextPageToken || null }));
+                }
             } finally {
                 setLibraryLoadingMoreBySection((prev) => ({ ...prev, [section]: false }));
             }
         },
-        [libraryLoadingMoreBySection, libraryNextBySection, readLibraryTrackPage, requestMyPlaylists, requestPlaylistItems]
+        [fetchDurationsByVideoId, libraryLoadingMoreBySection, libraryNextBySection, youtubeApiGet]
     );
 
     useEffect(() => {
@@ -441,9 +733,11 @@ export const useYoutubePlayer = () => {
     }, []);
 
     useEffect(() => {
-        const { accessToken: token, expiresAt } = youtubeTokenStore.read();
-        const storedName = youtubeAccountNameStore.read();
-        if (!token || !expiresAt || Date.now() >= expiresAt) {
+        const token = localStorage.getItem(STORAGE.ACCESS_TOKEN);
+        const expiresAt = Number(localStorage.getItem(STORAGE.EXPIRES_AT) || 0);
+        const storedName = localStorage.getItem(STORAGE.ACCOUNT_NAME) || "";
+        const scopeVersion = localStorage.getItem(STORAGE.SCOPE_VERSION);
+        if (!token || !expiresAt || Date.now() >= expiresAt || scopeVersion !== YOUTUBE_SCOPE_VERSION) {
             clearAuth();
             return;
         }
@@ -506,6 +800,7 @@ export const useYoutubePlayer = () => {
         (index: number) => {
             const target = queueRef.current[index];
             if (!target) return;
+            queueIndexRef.current = index;
             setQueueIndex(index);
             playTrack(target);
             pushRecent(target);
@@ -525,18 +820,28 @@ export const useYoutubePlayer = () => {
             const seedTrack = tracks[currentIndex];
             void (async () => {
                 if (seedTrack && canSearch()) {
-                    const mapped = await searchVideos(`${seedTrack.artist} music`, 10);
-                    const knownIds = new Set(queueRef.current.map((t) => t.videoId));
-                    const pick = mapped.find((r) => !knownIds.has(r.videoId));
-                    if (pick) {
-                        const insertAt = currentIndex + 1;
-                        setQueueTracks((prev) => {
-                            const next = [...prev];
-                            next.splice(insertAt, 0, pick);
-                            return next;
-                        });
-                        window.setTimeout(() => playQueueIndex(insertAt), 50);
-                        return;
+                    const query = `${seedTrack.artist} music`;
+                    const useAuth = Boolean(accessTokenRef.current);
+                    const resp = await youtubeApiGet(
+                        "/search",
+                        { part: "snippet", type: "video", videoEmbeddable: "true", videoCategoryId: "10", maxResults: 10, q: query },
+                        { auth: useAuth, includeApiKey: !useAuth, silent: true }
+                    );
+                    if (resp.ok) {
+                        const data = (await resp.json()) as YouTubePagedResponse<YouTubeSearchResult>;
+                        const mapped = await mapSearchResults(data.items || [], useAuth);
+                        const knownIds = new Set(queueRef.current.map((t) => t.videoId));
+                        const pick = mapped.find((r) => !knownIds.has(r.videoId));
+                        if (pick) {
+                            const insertAt = currentIndex + 1;
+                            setQueueTracks((prev) => {
+                                const next = [...prev];
+                                next.splice(insertAt, 0, pick);
+                                return next;
+                            });
+                            window.setTimeout(() => playQueueIndex(insertAt), 50);
+                            return;
+                        }
                     }
                 }
                 if (tracks.length > 1) playQueueIndex(Math.floor(Math.random() * tracks.length));
@@ -558,22 +863,18 @@ export const useYoutubePlayer = () => {
         }
         setIsPlaying(false);
         setStatusText("Reproducción finalizada.");
-    }, [playQueueIndex, canSearch, searchVideos]);
+    }, [playQueueIndex, canSearch, youtubeApiGet, mapSearchResults]);
 
-    const handleTrackEndRef = useRef(handleTrackEnd);
     useEffect(() => {
         handleTrackEndRef.current = handleTrackEnd;
     }, [handleTrackEnd]);
 
-    // The player is created once per host element; volume and callbacks are read through refs
-    // so changing them never destroys the iframe (which would stop playback).
     useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
         const { PlayerState } = window.YT;
         const player = new window.YT.Player(playerHostEl, {
-            width: "0",
-            height: "0",
-            videoId: DEFAULT_VIDEO_ID,
+            width: "200",
+            height: "200",
             playerVars: {
                 autoplay: 0,
                 controls: 0,
@@ -587,6 +888,22 @@ export const useYoutubePlayer = () => {
                     setPlayerReady(true);
                     player.setVolume(Math.round(volumeRef.current * 100));
                     setStatusText("YouTube player listo.");
+                    if (pendingTrackRef.current) {
+                        const pending = pendingTrackRef.current;
+                        pendingTrackRef.current = null;
+                        player.loadVideoById(pending.videoId);
+                        const resume = pendingConnectResumeRef.current;
+                        pendingConnectResumeRef.current = null;
+                        if (resume) {
+                            window.setTimeout(() => {
+                                player.seekTo(resume.positionMs / 1000, true);
+                                if (resume.isPlaying) player.playVideo();
+                                else player.pauseVideo();
+                            }, 250);
+                        } else {
+                            player.playVideo();
+                        }
+                    }
                 },
                 onStateChange: (event) => {
                     if (event.data === PlayerState.PLAYING) {
@@ -597,7 +914,7 @@ export const useYoutubePlayer = () => {
                         setStatusText("Pausado.");
                     } else if (event.data === PlayerState.ENDED) {
                         setIsPlaying(false);
-                        handleTrackEndRef.current();
+                        void handleTrackEndRef.current();
                     } else if (event.data === PlayerState.BUFFERING) {
                         setStatusText("Buffering...");
                     }
@@ -615,14 +932,6 @@ export const useYoutubePlayer = () => {
         };
     }, [apiReady, playerHostEl]);
 
-    // Plays a track requested before the player finished loading.
-    useEffect(() => {
-        const pending = pendingTrackRef.current;
-        if (!playerReady || !pending) return;
-        pendingTrackRef.current = null;
-        playTrack(pending);
-    }, [playerReady, playTrack]);
-
     useEffect(() => {
         if (!playerReady || !playerRef.current) return;
         const interval = setInterval(() => {
@@ -638,9 +947,9 @@ export const useYoutubePlayer = () => {
         const player = playerRef.current;
         if (!player || !playerReady) return;
         if (!showVideo) {
-            player.setSize(1, 1);
+            player.setSize(200, 200);
         } else if (pipMode) {
-            player.setSize(288, 162);
+            player.setSize(356, 200);
         } else {
             // Fill the image slot (square container ~240-272px depending on breakpoint)
             player.setSize(272, 272);
@@ -679,7 +988,9 @@ export const useYoutubePlayer = () => {
             const expiresAt = Date.now() + Math.max(60, Number(response.expires_in || 3600)) * 1000;
             setAccessToken(response.access_token);
             setTokenExpiresAt(expiresAt);
-            youtubeTokenStore.save({ accessToken: response.access_token, expiresAt });
+            localStorage.setItem(STORAGE.ACCESS_TOKEN, response.access_token);
+            localStorage.setItem(STORAGE.EXPIRES_AT, String(expiresAt));
+            localStorage.setItem(STORAGE.SCOPE_VERSION, YOUTUBE_SCOPE_VERSION);
             fetchedLibraryRef.current = false;
             void fetchLibrary().finally(() => {
                 setIsAuthLoading(false);
@@ -702,12 +1013,13 @@ export const useYoutubePlayer = () => {
             const q = query.trim();
             if (!q) {
                 setSearchResults([]);
-                return;
+                return [] as YouTubeTrack[];
             }
             setSearchLoading(true);
             try {
                 const tracks = await fetchSearch(q);
                 setSearchResults(tracks);
+                return tracks;
             } finally {
                 setSearchLoading(false);
             }
@@ -786,7 +1098,11 @@ export const useYoutubePlayer = () => {
     const nextTrack = useCallback(() => {
         const tracks = queueRef.current;
         if (!tracks.length) return;
-        if (shuffleModeRef.current !== "off" && tracks.length > 1) {
+        if (shuffleModeRef.current === "smart") {
+            handleTrackEnd();
+            return;
+        }
+        if (shuffleModeRef.current === "shuffle" && tracks.length > 1) {
             playQueueIndex(Math.floor(Math.random() * tracks.length));
             return;
         }
@@ -796,7 +1112,7 @@ export const useYoutubePlayer = () => {
             return;
         }
         if (repeatMode > 0) playQueueIndex(0);
-    }, [playQueueIndex, repeatMode]);
+    }, [handleTrackEnd, playQueueIndex, repeatMode]);
 
     const prevTrack = useCallback(() => {
         const tracks = queueRef.current;
@@ -811,7 +1127,7 @@ export const useYoutubePlayer = () => {
 
     const cycleShuffle = useCallback(() => {
         setShuffleMode((prev) => {
-            const next = getNextShuffleMode(prev);
+            const next = getNextShuffleMode(prev, { smart: true });
             shuffleModeRef.current = next;
             return next;
         });
@@ -831,14 +1147,92 @@ export const useYoutubePlayer = () => {
 
     const setVolumeLevel = useCallback((value: number) => {
         const player = playerRef.current;
-        const next = clamp01(value);
+        const next = Math.max(0, Math.min(1, value));
+        volumeRef.current = next;
         setVolume(next);
-        youtubeVolumeStore.write(next);
+        localStorage.setItem(VOLUME_STORAGE_KEY, String(next));
         if (player) player.setVolume(Math.round(next * 100));
     }, []);
 
+    const play = useCallback(() => {
+        playerRef.current?.unMute();
+        playerRef.current?.playVideo();
+    }, []);
+
+    const pause = useCallback(() => {
+        playerRef.current?.pauseVideo();
+    }, []);
+
+    const unmute = useCallback(() => {
+        playerRef.current?.unMute();
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        setCurrentRating("none");
+        const videoId = currentTrack?.id.startsWith("yt-") ? currentTrack.id.slice(3) : currentTrack?.id;
+        if (!videoId || !accessToken) return () => { active = false; };
+
+        void youtubeApiGet(
+            "/videos/getRating",
+            { id: videoId },
+            { auth: true, includeApiKey: false, silent: true }
+        ).then(async (response) => {
+            if (!active || !response.ok) return;
+            const payload = await response.json() as { items?: Array<{ rating?: "like" | "dislike" | "none" }> };
+            if (active) setCurrentRating(payload.items?.[0]?.rating || "none");
+        });
+
+        return () => { active = false; };
+    }, [accessToken, currentTrack?.id, youtubeApiGet]);
+
+    const rateCurrentTrack = useCallback(async (rating: "like" | "dislike") => {
+        const videoId = currentTrack?.id.startsWith("yt-") ? currentTrack.id.slice(3) : currentTrack?.id;
+        if (!videoId) {
+            toast({ title: "Sin track", description: "Selecciona una canción antes de calificarla." });
+            return;
+        }
+        if (!accessTokenRef.current) {
+            toast({ title: "Conecta YouTube", description: "Conecta tu cuenta para guardar Me gusta o No me gusta." });
+            return;
+        }
+
+        const nextRating = currentRating === rating ? "none" : rating;
+        const url = new URL(`${YOUTUBE_API_BASE}/videos/rate`);
+        url.searchParams.set("id", videoId);
+        url.searchParams.set("rating", nextRating);
+        setRatingLoading(true);
+        try {
+            const response = await fetch(url.toString(), {
+                method: "POST",
+                headers: { Authorization: `Bearer ${accessTokenRef.current}` },
+            });
+            if (!response.ok) {
+                toast({
+                    variant: "destructive",
+                    title: "No se pudo guardar",
+                    description: response.status === 403
+                        ? "Vuelve a conectar YouTube para autorizar likes y dislikes."
+                        : `YouTube respondió con el error ${response.status}.`,
+                });
+                return;
+            }
+            setCurrentRating(nextRating);
+            toast({
+                title: nextRating === "none" ? "Calificación eliminada" : nextRating === "like" ? "Te gusta" : "No te gusta",
+                description: currentTrack?.title,
+            });
+        } finally {
+            setRatingLoading(false);
+        }
+    }, [currentRating, currentTrack]);
+
     const shareCurrent = useCallback(async () => {
-        const target = currentTrack?.externalUrl || toWatchUrl(DEFAULT_VIDEO_ID);
+        const target = currentTrack?.externalUrl;
+        if (!target) {
+            toast({ title: "Sin track", description: "Selecciona una canción antes de compartir." });
+            return;
+        }
         await navigator.clipboard.writeText(target);
         toast({ title: "Enlace copiado", description: "YouTube URL copiada al portapapeles." });
     }, [currentTrack?.externalUrl]);
@@ -855,6 +1249,74 @@ export const useYoutubePlayer = () => {
     const addToQueue = useCallback((track: YouTubeTrack) => {
         setQueueTracks((prev) => (prev.some((item) => item.videoId === track.videoId) ? prev : [...prev, track]));
     }, []);
+
+    const queueCurrentNext = useCallback(() => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track) return;
+        setQueueTracks((prev) => {
+            const next = [...prev];
+            const insertAt = Math.min(Math.max(queueIndexRef.current + 1, 0), next.length);
+            next.splice(insertAt, 0, track);
+            return next;
+        });
+        toast({ title: "Reproducirá a continuación", description: track.title });
+    }, [currentTrack]);
+
+    const queueCurrentLast = useCallback(() => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track) return;
+        setQueueTracks((prev) => [...prev, track]);
+        toast({ title: "Agregada a la fila", description: track.title });
+    }, [currentTrack]);
+
+    const clearQueue = useCallback(() => {
+        setQueueTracks([]);
+        setQueueIndex(-1);
+        queueIndexRef.current = -1;
+        toast({ title: "Fila descartada", description: "La pista actual seguirá reproduciéndose." });
+    }, []);
+
+    const startMixFromCurrent = useCallback(() => {
+        if (!currentTrack) return;
+        setShuffleMode("smart");
+        shuffleModeRef.current = "smart";
+        toast({
+            title: "Smart Shuffle activado",
+            description: `Usaremos ${currentTrack.title} para encontrar la siguiente canción.`,
+        });
+    }, [currentTrack]);
+
+    const saveCurrentToPlaylist = useCallback(async (playlistId: string, playlistTitle: string) => {
+        const track = currentTrackToYouTubeTrack(currentTrack);
+        if (!track || !accessTokenRef.current) {
+            toast({ title: "Conecta YouTube", description: "Conecta tu cuenta para guardar canciones en playlists." });
+            return;
+        }
+        const url = new URL(`${YOUTUBE_API_BASE}/playlistItems`);
+        url.searchParams.set("part", "snippet");
+        const response = await fetch(url.toString(), {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${accessTokenRef.current}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                snippet: {
+                    playlistId,
+                    resourceId: { kind: "youtube#video", videoId: track.videoId },
+                },
+            }),
+        });
+        if (!response.ok) {
+            toast({
+                variant: "destructive",
+                title: "No se pudo guardar",
+                description: response.status === 409 ? "La canción ya está en esa playlist." : `YouTube respondió con el error ${response.status}.`,
+            });
+            return;
+        }
+        toast({ title: "Guardada en playlist", description: `${track.title} → ${playlistTitle}` });
+    }, [currentTrack]);
 
     const refreshQueue = useCallback(() => setQueueTracks((prev) => [...prev]), []);
 
@@ -875,13 +1337,222 @@ export const useYoutubePlayer = () => {
         setStatusText("Modo YouTube cerrado.");
     }, []);
 
-    const progress = useMemo(() => toProgressPercent(positionMs, durationMs), [durationMs, positionMs]);
+    const pauseForRemoteDevice = useCallback(() => {
+        playerRef.current?.pauseVideo();
+        setIsPlaying(false);
+        setStatusText("Reproducción activa en otro dispositivo.");
+    }, []);
+
+    const applyConnectSession = useCallback((state: ConnectSessionState, resumePositionMs: number) => {
+        const track = state.track as YouTubeTrack | null;
+        if (!track) return;
+
+        const remoteQueue = state.queue as YouTubeTrack[];
+        const trackIndex = remoteQueue.findIndex((item) => item.videoId === track.videoId);
+        const nextQueue = trackIndex >= 0 ? remoteQueue : [track, ...remoteQueue];
+        const nextIndex = trackIndex >= 0 ? trackIndex : 0;
+
+        queueRef.current = nextQueue;
+        queueIndexRef.current = nextIndex;
+        shuffleModeRef.current = state.shuffleMode;
+        repeatModeRef.current = state.repeatMode;
+        setQueueTracks(nextQueue);
+        setQueueIndex(nextIndex);
+        setShuffleMode(state.shuffleMode);
+        setRepeatMode(state.repeatMode);
+        setVolumeLevel(state.volume ?? volumeRef.current);
+        setCurrentTrack(mapCurrentTrack(track));
+        setDurationMs(state.durationMs || track.durationMs);
+        setPositionMs(resumePositionMs);
+        pushRecent(track);
+
+        const player = playerRef.current;
+        if (!playerReady || !player) {
+            pendingTrackRef.current = track;
+            pendingConnectResumeRef.current = { positionMs: resumePositionMs, isPlaying: state.isPlaying };
+            return;
+        }
+
+        player.loadVideoById(track.videoId);
+        window.setTimeout(() => {
+            player.seekTo(resumePositionMs / 1000, true);
+            if (state.isPlaying) player.playVideo();
+            else player.pauseVideo();
+        }, 250);
+    }, [playerReady, pushRecent, setVolumeLevel]);
+
+    const applyRemoteState = useCallback((state: ConnectSessionState, remotePositionMs: number) => {
+        const track = state.track as YouTubeTrack | null;
+        const remoteQueue = state.queue as YouTubeTrack[];
+        playerRef.current?.pauseVideo();
+        queueRef.current = remoteQueue;
+        queueIndexRef.current = state.queueIndex;
+        shuffleModeRef.current = state.shuffleMode;
+        repeatModeRef.current = state.repeatMode;
+        setQueueTracks(remoteQueue);
+        setQueueIndex(state.queueIndex);
+        setShuffleMode(state.shuffleMode);
+        setRepeatMode(state.repeatMode);
+        setCurrentTrack(track ? mapCurrentTrack(track) : null);
+        setDurationMs(state.durationMs);
+        const now = Date.now();
+        const optimisticSeek = optimisticSeekRef.current;
+        const remoteProgress = state.durationMs ? (remotePositionMs / state.durationMs) * 100 : 0;
+        const seekPending = optimisticSeek && (state.commands || []).some(
+            (command) => command.type === "seek" && Math.abs(command.value - optimisticSeek.value) < 0.5
+        );
+        if (!optimisticSeek || (!seekPending && now >= optimisticSeek.until) || Math.abs(remoteProgress - optimisticSeek.value) < 2) {
+            optimisticSeekRef.current = null;
+            setPositionMs(remotePositionMs);
+        }
+        setIsPlaying(state.isPlaying);
+        const optimisticVolume = optimisticVolumeRef.current;
+        const remoteVolume = state.volume ?? volumeRef.current;
+        const volumePending = optimisticVolume && (state.commands || []).some(
+            (command) => command.type === "volume" && Math.abs(command.value - optimisticVolume.value) < 0.005
+        );
+        if (!optimisticVolume || (!volumePending && now >= optimisticVolume.until) || Math.abs(remoteVolume - optimisticVolume.value) < 0.015) {
+            optimisticVolumeRef.current = null;
+            setVolumeLevel(remoteVolume);
+        }
+        setStatusText(`Controlando ${state.activeDeviceName}.`);
+    }, [setVolumeLevel]);
+
+    const executeRemoteCommand = useCallback(async (command: ConnectRemoteCommand) => {
+        switch (command.type) {
+            case "toggle-play": togglePlayPause(); break;
+            case "next": nextTrack(); break;
+            case "previous": prevTrack(); break;
+            case "cycle-shuffle": cycleShuffle(); break;
+            case "cycle-repeat": cycleRepeat(); break;
+            case "seek": seekToProgress(command.value); break;
+            case "volume": setVolumeLevel(command.value); break;
+            case "play-track": playSearchTrack(command.track as YouTubeTrack); break;
+            case "play-queue-index": playQueueIndex(command.queueIndex); break;
+            case "replace-queue": {
+                const nextQueue = command.queue as YouTubeTrack[];
+                queueRef.current = nextQueue;
+                setQueueTracks(nextQueue);
+                playQueueIndex(command.queueIndex);
+                break;
+            }
+        }
+    }, [cycleRepeat, cycleShuffle, nextTrack, playQueueIndex, playSearchTrack, prevTrack, seekToProgress, setVolumeLevel, togglePlayPause]);
+
+    const connectSnapshot = useMemo<ConnectPlaybackSnapshot>(() => ({
+        track: currentTrackToYouTubeTrack(currentTrack),
+        queue: queueTracks,
+        queueIndex,
+        positionMs,
+        durationMs,
+        isPlaying,
+        shuffleMode,
+        repeatMode,
+        volume,
+    }), [currentTrack, durationMs, isPlaying, positionMs, queueIndex, queueTracks, repeatMode, shuffleMode, volume]);
+
+    const connect = useYoutubeConnect({
+        snapshot: connectSnapshot,
+        onRemotePause: pauseForRemoteDevice,
+        onTakeover: applyConnectSession,
+        onRemoteState: applyRemoteState,
+        onRemoteCommand: executeRemoteCommand,
+    });
+
+    const optimisticSeekRef = useRef<{ value: number; until: number } | null>(null);
+    const optimisticVolumeRef = useRef<{ value: number; until: number } | null>(null);
+    const remoteSeekTimerRef = useRef<number | null>(null);
+    const remoteVolumeTimerRef = useRef<number | null>(null);
+
+    useEffect(() => () => {
+        if (remoteSeekTimerRef.current !== null) window.clearTimeout(remoteSeekTimerRef.current);
+        if (remoteVolumeTimerRef.current !== null) window.clearTimeout(remoteVolumeTimerRef.current);
+    }, []);
+
+    const isRemoteControl = connect.isConnected && !connect.isActiveDevice;
+    const remoteTogglePlayPause = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "toggle-play" });
+        else togglePlayPause();
+    }, [connect, isRemoteControl, togglePlayPause]);
+    const remoteNextTrack = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "next" });
+        else nextTrack();
+    }, [connect, isRemoteControl, nextTrack]);
+    const remotePrevTrack = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "previous" });
+        else prevTrack();
+    }, [connect, isRemoteControl, prevTrack]);
+    const remoteCycleShuffle = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "cycle-shuffle" });
+        else cycleShuffle();
+    }, [connect, cycleShuffle, isRemoteControl]);
+    const remoteCycleRepeat = useCallback(() => {
+        if (isRemoteControl) void connect.sendCommand({ type: "cycle-repeat" });
+        else cycleRepeat();
+    }, [connect, cycleRepeat, isRemoteControl]);
+    const remoteSeek = useCallback((value: number) => {
+        if (!isRemoteControl) {
+            seekToProgress(value);
+            return;
+        }
+        const next = Math.max(0, Math.min(100, value));
+        optimisticSeekRef.current = { value: next, until: Date.now() + 8_000 };
+        setPositionMs(Math.round((next / 100) * durationMs));
+        if (remoteSeekTimerRef.current !== null) window.clearTimeout(remoteSeekTimerRef.current);
+        remoteSeekTimerRef.current = window.setTimeout(() => {
+            remoteSeekTimerRef.current = null;
+            void connect.sendCommand({ type: "seek", value: next });
+        }, 160);
+    }, [connect, durationMs, isRemoteControl, seekToProgress]);
+    const remoteVolume = useCallback((value: number) => {
+        if (!isRemoteControl) {
+            setVolumeLevel(value);
+            return;
+        }
+        const next = Math.max(0, Math.min(1, value));
+        optimisticVolumeRef.current = { value: next, until: Date.now() + 8_000 };
+        volumeRef.current = next;
+        setVolume(next);
+        if (remoteVolumeTimerRef.current !== null) window.clearTimeout(remoteVolumeTimerRef.current);
+        remoteVolumeTimerRef.current = window.setTimeout(() => {
+            remoteVolumeTimerRef.current = null;
+            void connect.sendCommand({ type: "volume", value: next });
+        }, 160);
+    }, [connect, isRemoteControl, setVolumeLevel]);
+    const remotePlaySearchTrack = useCallback((track: YouTubeTrack) => {
+        if (isRemoteControl) void connect.sendCommand({ type: "play-track", track });
+        else playSearchTrack(track);
+    }, [connect, isRemoteControl, playSearchTrack]);
+    const remotePlayQueueTrack = useCallback((trackId: string) => {
+        if (isRemoteControl) {
+            const remoteIndex = queueRef.current.findIndex((item) => item.id === trackId);
+            if (remoteIndex >= 0) void connect.sendCommand({ type: "play-queue-index", queueIndex: remoteIndex });
+        } else playQueueTrack(trackId);
+    }, [connect, isRemoteControl, playQueueTrack]);
+    const remotePlayLibraryItem = useCallback(async (item: YouTubeLibraryItem) => {
+        if (!isRemoteControl) return playLibraryItem(item);
+        if (item.kind === "track") {
+            await connect.sendCommand({ type: "play-track", track: item });
+            return;
+        }
+        const tracks = await fetchPlaylistTracks(item.playlistId);
+        if (!tracks.length) {
+            toast({ title: "Playlist vacia", description: "No se encontraron videos reproducibles." });
+            return;
+        }
+        await connect.sendCommand({ type: "replace-queue", queue: tracks, queueIndex: 0 });
+    }, [connect, fetchPlaylistTracks, isRemoteControl, playLibraryItem]);
+
+    const progress = useMemo(() => {
+        if (!durationMs) return 0;
+        return Math.max(0, Math.min(100, (positionMs / durationMs) * 100));
+    }, [durationMs, positionMs]);
 
     return {
         playerHostRef,
         isReady: playerReady,
         statusText,
-        sessionCountdown: tokenExpiresAt ? formatMs(tokenExpiresAt - Date.now()) : "-",
+        sessionCountdown: tokenExpiresAt ? formatCountdown(tokenExpiresAt) : "-",
         currentTrack,
         queue: queueTracks.map(mapQueueTrack),
         searchResults,
@@ -891,6 +1562,9 @@ export const useYoutubePlayer = () => {
         shuffleMode,
         repeatMode,
         volume,
+        currentRating,
+        ratingLoading,
+        positionMs,
         durationMs,
         progress,
         currentTime: formatMs(positionMs),
@@ -899,6 +1573,7 @@ export const useYoutubePlayer = () => {
         commentsLoading,
         showVideo,
         pipMode,
+        connect,
         toggleVideoMode,
         togglePipMode,
         isAuthenticated: Boolean(accessToken),
@@ -912,21 +1587,34 @@ export const useYoutubePlayer = () => {
         logout,
         fetchLibrary,
         loadMoreLibrarySection,
-        playLibraryItem,
+        playLibraryItem: remotePlayLibraryItem,
         clearSearchResults,
         searchCatalog,
+        fetchPlaylistTracks,
         searchAndPlay,
-        playSearchTrack,
+        playSearchTrack: remotePlaySearchTrack,
+        playLocalSearchTrack: playSearchTrack,
         addToQueue,
-        togglePlayPause,
-        nextTrack,
-        prevTrack,
-        cycleShuffle,
-        cycleRepeat,
-        seekToProgress,
-        setVolumeLevel,
+        queueCurrentNext,
+        queueCurrentLast,
+        clearQueue,
+        startMixFromCurrent,
+        saveCurrentToPlaylist,
+        togglePlayPause: remoteTogglePlayPause,
+        play,
+        pause,
+        unmute,
+        nextTrack: remoteNextTrack,
+        prevTrack: remotePrevTrack,
+        cycleShuffle: remoteCycleShuffle,
+        cycleRepeat: remoteCycleRepeat,
+        seekToProgress: remoteSeek,
+        seekLocalToProgress: seekToProgress,
+        setVolumeLevel: remoteVolume,
+        setLocalVolumeLevel: setVolumeLevel,
+        rateCurrentTrack,
         shareCurrent,
-        playQueueTrack,
+        playQueueTrack: remotePlayQueueTrack,
         refreshQueue,
         reset,
     };

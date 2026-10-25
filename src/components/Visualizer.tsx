@@ -11,6 +11,7 @@ interface VisualizerProps {
     analyser?: AnalyserNode | null;
     onRequestCapture?: () => void;
     bpm?: number | null;
+    bpmConfidence?: number;
     beatSignal?: React.MutableRefObject<number>;
 }
 
@@ -19,6 +20,7 @@ const Visualizer = ({
     analyser,
     onRequestCapture,
     bpm,
+    bpmConfidence = 0,
     beatSignal,
 }: VisualizerProps) => {
     const rafRef = useRef<number | null>(null);
@@ -153,7 +155,7 @@ const Visualizer = ({
                         className="ml-1 font-display text-[8px]"
                         style={{ color: "hsl(var(--accent))" }}
                     >
-                        {bpm} BPM
+                        {bpm} BPM · {Math.round(bpmConfidence * 100)}%
                     </span>
                 )}
                 {analyser ? (

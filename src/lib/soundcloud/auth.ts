@@ -3,11 +3,9 @@ import { browserStorage, createTokenStore } from "@/lib/storage";
 import {
     SOUNDCLOUD_AUTHORIZE_URL,
     SOUNDCLOUD_CLIENT_ID,
-    SOUNDCLOUD_CLIENT_SECRET,
     SOUNDCLOUD_REDIRECT_URI,
     SOUNDCLOUD_STATE_PREFIX,
     SOUNDCLOUD_STORAGE_KEYS,
-    SOUNDCLOUD_TOKEN_URL,
     hasSoundcloudCredentials,
 } from "./config";
 import type { SoundcloudTokenResponse } from "./types";
@@ -16,7 +14,7 @@ export const soundcloudTokenStore = createTokenStore({
     accessToken: SOUNDCLOUD_STORAGE_KEYS.ACCESS_TOKEN,
     refreshToken: SOUNDCLOUD_STORAGE_KEYS.REFRESH_TOKEN,
     expiresAt: SOUNDCLOUD_STORAGE_KEYS.EXPIRES_AT,
-    alsoClear: [SOUNDCLOUD_STORAGE_KEYS.OAUTH_STATE],
+    alsoClear: [SOUNDCLOUD_STORAGE_KEYS.OAUTH_STATE, SOUNDCLOUD_STORAGE_KEYS.PKCE_VERIFIER],
 });
 
 /** Persisted OAuth `state`, checked against the callback to reject forged redirects. */
@@ -38,7 +36,7 @@ export const getTokenExpiry = (expiresIn?: number) => {
     return Date.now() + Math.max(60, expiresIn) * 1000;
 };
 
-export const buildSoundcloudAuthorizeUrl = (state: string) => {
+export const buildSoundcloudAuthorizeUrl = (state: string, codeChallenge: string) => {
     const authUrl = new URL(SOUNDCLOUD_AUTHORIZE_URL);
     authUrl.search = new URLSearchParams({
         client_id: SOUNDCLOUD_CLIENT_ID,
@@ -46,6 +44,8 @@ export const buildSoundcloudAuthorizeUrl = (state: string) => {
         redirect_uri: SOUNDCLOUD_REDIRECT_URI,
         state,
         scope: "*",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
     }).toString();
     return authUrl.toString();
 };
@@ -55,12 +55,10 @@ export const requestSoundcloudToken = async (body: Record<string, string>): Prom
     if (!hasSoundcloudCredentials()) {
         throw new Error("Missing SoundCloud credentials");
     }
-    const response = await fetch(SOUNDCLOUD_TOKEN_URL, {
+    const response = await fetch("/api/soundcloud/token", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-            client_id: SOUNDCLOUD_CLIENT_ID,
-            client_secret: SOUNDCLOUD_CLIENT_SECRET,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
             redirect_uri: SOUNDCLOUD_REDIRECT_URI,
             ...body,
         }),

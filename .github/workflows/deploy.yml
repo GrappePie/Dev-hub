@@ -1,19 +1,19 @@
-name: Deploy
+name: Validate
 
 on:
   push:
     branches:
       - main
+      - refactor/solid-singleton
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -22,7 +22,6 @@ jobs:
       VITE_SPOTIFY_CLIENT_ID: ${{ secrets.VITE_SPOTIFY_CLIENT_ID }}
       VITE_SPOTIFY_REDIRECT_URI: ${{ secrets.VITE_SPOTIFY_REDIRECT_URI }}
       VITE_SOUNDCLOUD_CLIENT_ID: ${{ secrets.VITE_SOUNDCLOUD_CLIENT_ID }}
-      VITE_SOUNDCLOUD_CLIENT_SECRET: ${{ secrets.VITE_SOUNDCLOUD_CLIENT_SECRET }}
       VITE_SOUNDCLOUD_REDIRECT_URI: ${{ secrets.VITE_SOUNDCLOUD_REDIRECT_URI }}
       VITE_YOUTUBE_API_KEY: ${{ secrets.VITE_YOUTUBE_API_KEY }}
       VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
@@ -46,30 +45,7 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
-
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5
+        run: npm run test
 
       - name: Build
         run: npm run build
-        env:
-          # "/<repo>/" for project sites, "/" for user sites or custom domains.
-          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

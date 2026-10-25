@@ -44,6 +44,9 @@ declare global {
             event: E,
             cb?: (payload: SpotifyPlayerEventMap[E]) => void
         ) => boolean;
+        activateElement: () => Promise<void>;
+        pause: () => Promise<void>;
+        resume: () => Promise<void>;
         togglePlay: () => Promise<void>;
         nextTrack: () => Promise<void>;
         previousTrack: () => Promise<void>;
@@ -170,6 +173,8 @@ declare global {
     }
 
     interface YouTubePlayer {
+        unMute: () => void;
+        isMuted: () => boolean;
         playVideo: () => void;
         pauseVideo: () => void;
         loadVideoById: (videoId: string) => void;

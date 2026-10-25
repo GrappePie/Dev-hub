@@ -1,53 +1,86 @@
+import { hasPermalink, mapPlaylistItems, mapTrackItems, mapLikeItems } from "@/lib/soundcloud/mappers";
+import type { SoundcloudApiItem } from "@/lib/soundcloud/types";
+import { assertOAuthState } from "@/lib/oauth";
+import { requestSoundcloudToken } from "@/lib/soundcloud/auth";
+import { loadSoundcloudWidgetApi } from "@/lib/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
-import { useOAuthPopupListener } from "@/hooks/useOAuthPopupListener";
 import fallbackAlbumArt from "@/assets/album-art-placeholder.svg";
-import { clamp01, formatMs, toProgressPercent } from "@/lib/format";
-import { isOAuthPopupWindow, openOAuthPopup, postOAuthResultToOpener, readOAuthCallbackParams } from "@/lib/oauth";
-import { loadSoundcloudWidgetApi } from "@/lib/sdk";
 import { getNextShuffleMode } from "@/lib/shuffleMode";
-import {
-    buildSoundcloudAuthorizeUrl,
-    getTokenExpiry,
-    isSoundcloudState,
-    requestSoundcloudToken,
-    soundcloudOAuthState,
-    soundcloudTokenStore,
-} from "@/lib/soundcloud/auth";
-import {
-    DEFAULT_TRACK_URL,
-    SOUNDCLOUD_OAUTH_MESSAGE_TYPE,
-    SOUNDCLOUD_OAUTH_POPUP_NAME,
-    SOUNDCLOUD_REDIRECT_URI,
-    hasSoundcloudCredentials,
-} from "@/lib/soundcloud/config";
-import {
-    appendClientId,
-    buildWidgetSrc,
-    dedupeByPermalink,
-    mapArtistData,
-    mapLikeItems,
-    mapPlayableTracks,
-    mapPlaylistItems,
-    mapSearchResults,
-    mapTrackItems,
-    normalizeSoundcloudUrl,
-    parseCollectionResponse,
-    upscaleArtwork,
-} from "@/lib/soundcloud/mappers";
-import type {
-    ScTimedComment,
-    SoundcloudApiItem,
-    SoundcloudArtistProfile,
-    SoundcloudLibrarySection,
-    SoundcloudPlaylist,
-    SoundcloudPopupMessage,
-    SoundcloudTokenResponse,
-    SoundcloudUser,
-} from "@/lib/soundcloud/types";
-import type { CurrentTrack, ArtistData } from "@/types/player";
+import type { CurrentTrack, ArtistData } from "@/hooks/useSpotifyPlayer";
 
-export type { ScTimedComment, SoundcloudLibrarySection };
+const SOUNDCLOUD_API_BASE = "https://api.soundcloud.com";
+const SOUNDCLOUD_AUTHORIZE_URL = "https://secure.soundcloud.com/authorize";
+const SOUNDCLOUD_STATE_PREFIX = "sc_";
+
+const SOUNDCLOUD_CLIENT_ID = import.meta.env.VITE_SOUNDCLOUD_CLIENT_ID || "";
+const DEFAULT_REDIRECT_URI = `${window.location.origin}${window.location.pathname}`;
+const SOUNDCLOUD_REDIRECT_URI = import.meta.env.VITE_SOUNDCLOUD_REDIRECT_URI || DEFAULT_REDIRECT_URI;
+const DEFAULT_TRACK_URL = "https://soundcloud.com/forss/flickermood";
+
+const STORAGE = {
+    ACCESS_TOKEN: "sc_access_token",
+    REFRESH_TOKEN: "sc_refresh_token",
+    EXPIRES_AT: "sc_token_expires_at",
+    OAUTH_STATE: "sc_oauth_state",
+    PKCE_VERIFIER: "sc_pkce_verifier",
+} as const;
+
+interface SoundcloudTokenResponse {
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+}
+
+interface SoundcloudUser {
+    id: number;
+    username: string;
+    full_name?: string;
+    avatar_url?: string;
+    permalink_url?: string;
+}
+
+interface SoundcloudPlaylist {
+    id: number;
+    title: string;
+    permalink_url: string;
+    artwork_url?: string | null;
+    track_count?: number;
+    subtitle?: string;
+    kind?: "playlist" | "track" | "like";
+    artist?: string;
+    duration_ms?: number;
+}
+
+export type SoundcloudLibrarySection = "playlists" | "tracks" | "likes";
+
+interface SoundcloudPopupMessage {
+    type?: string;
+    code?: string;
+    state?: string | null;
+    error?: string;
+}
+
+interface SoundcloudSearchItem {
+    id: number;
+    title: string;
+    permalink_url: string;
+    artwork_url?: string | null;
+    user?: { username?: string; avatar_url?: string | null };
+    duration?: number;
+}
+
+export interface ScTimedComment {
+    id: number;
+    body: string;
+    timestamp: number; // milliseconds into the track
+    user: { username: string; avatar_url?: string | null };
+}
+
+interface SoundcloudCollectionResponse<T> {
+    collection?: T[];
+    next_href?: string | null;
+}
 
 const EMPTY_LIBRARY_SECTIONS: Record<SoundcloudLibrarySection, SoundcloudPlaylist[]> = {
     playlists: [],
@@ -65,6 +98,82 @@ const EMPTY_LIBRARY_LOADING: Record<SoundcloudLibrarySection, boolean> = {
     playlists: false,
     tracks: false,
     likes: false,
+};
+
+const formatMs = (ms = 0) => {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const normalizeSoundcloudUrl = (value: string) => {
+    const raw = value.trim().split("?")[0]; // strip query params (UTM, etc.)
+    if (!raw) return "";
+    if (raw.startsWith("https://soundcloud.com/") || raw.startsWith("https://on.soundcloud.com/")) return raw;
+    if (raw.startsWith("http://soundcloud.com/")) return raw.replace("http://", "https://");
+    if (raw.startsWith("soundcloud.com/")) return `https://${raw}`;
+    return "";
+};
+
+const buildWidgetSrc = (trackUrl: string, autoPlay = false) =>
+    `https://w.soundcloud.com/player/?url=${encodeURIComponent(trackUrl)}&auto_play=${autoPlay ? "true" : "false"}&hide_related=false&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+
+const upscaleArtwork = (url?: string | null) => {
+    if (!url) return fallbackAlbumArt;
+    return url.replace("-large.", "-t500x500.");
+};
+
+const toBase64Url = (bytes: Uint8Array) => {
+    let binary = "";
+    bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+};
+
+const generateRandomString = (byteLength: number) => {
+    const bytes = new Uint8Array(byteLength);
+    crypto.getRandomValues(bytes);
+    return toBase64Url(bytes);
+};
+
+const createCodeChallenge = async (verifier: string) => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return toBase64Url(new Uint8Array(digest));
+};
+
+const appendClientId = (path: string, includeClientId = true) => {
+    const target = path.startsWith("http") ? new URL(path) : new URL(`${SOUNDCLOUD_API_BASE}${path}`);
+    if (includeClientId && SOUNDCLOUD_CLIENT_ID && !target.searchParams.has("client_id")) {
+        target.searchParams.set("client_id", SOUNDCLOUD_CLIENT_ID);
+    }
+    return target.toString();
+};
+
+const isSoundcloudState = (value?: string | null) => Boolean(value && value.startsWith(SOUNDCLOUD_STATE_PREFIX));
+
+const getTokenExpiry = (expiresIn?: number) => {
+    if (!expiresIn || !Number.isFinite(expiresIn)) return Date.now() + 3600 * 1000;
+    return Date.now() + Math.max(60, expiresIn) * 1000;
+};
+
+const parseCollectionResponse = <T>(raw: unknown): { items: T[]; nextHref: string | null } => {
+    if (Array.isArray(raw)) {
+        return { items: raw as T[], nextHref: null };
+    }
+    const data = raw as SoundcloudCollectionResponse<T> | null;
+    const items = Array.isArray(data?.collection) ? data.collection : [];
+    return { items, nextHref: data?.next_href || null };
+};
+
+const dedupeByPermalink = (items: SoundcloudPlaylist[]) => {
+    const uniqueByUrl = new Map<string, SoundcloudPlaylist>();
+    items.forEach((item) => {
+        if (!item.permalink_url) return;
+        if (!uniqueByUrl.has(item.permalink_url)) {
+            uniqueByUrl.set(item.permalink_url, item);
+        }
+    });
+    return Array.from(uniqueByUrl.values());
 };
 
 export const useSoundcloudPlayer = () => {
@@ -99,6 +208,9 @@ export const useSoundcloudPlayer = () => {
     const scApiRef = useRef<((path: string, init?: RequestInit, opts?: { silent?: boolean; includeClientId?: boolean }) => Promise<Response>) | null>(null);
     const currentScTrackIdRef = useRef<number | null>(null);
     const volumeRef = useRef(0.5);
+    const loadedUrlRef = useRef(DEFAULT_TRACK_URL);
+    const durationMsRef = useRef(0);
+    const pendingAutoPlayRef = useRef(false);
     const [shuffleMode, setShuffleMode] = useState<"off" | "shuffle" | "smart">("off");
     const [expandedPlaylist, setExpandedPlaylist] = useState<{ id: number; title: string; tracks: SoundcloudPlaylist[] } | null>(null);
     const [expandedPlaylistLoading, setExpandedPlaylistLoading] = useState(false);
@@ -113,6 +225,9 @@ export const useSoundcloudPlayer = () => {
     const [positionMs, setPositionMs] = useState(0);
     const [currentTrack, setCurrentTrack] = useState<CurrentTrack | null>(null);
     const [loadedUrl, setLoadedUrl] = useState(DEFAULT_TRACK_URL);
+
+    loadedUrlRef.current = loadedUrl;
+    durationMsRef.current = durationMs;
 
     useEffect(() => {
         accessTokenRef.current = accessToken;
@@ -131,7 +246,11 @@ export const useSoundcloudPlayer = () => {
         setLibraryBySection(EMPTY_LIBRARY_SECTIONS);
         setLibraryNextBySection(EMPTY_LIBRARY_NEXT);
         setLibraryLoadingMoreBySection(EMPTY_LIBRARY_LOADING);
-        soundcloudTokenStore.clear();
+        localStorage.removeItem(STORAGE.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE.REFRESH_TOKEN);
+        localStorage.removeItem(STORAGE.EXPIRES_AT);
+        localStorage.removeItem(STORAGE.OAUTH_STATE);
+        localStorage.removeItem(STORAGE.PKCE_VERIFIER);
     }, []);
 
     const applyTokenResponse = useCallback((data: SoundcloudTokenResponse, fallbackRefreshToken?: string | null) => {
@@ -139,17 +258,25 @@ export const useSoundcloudPlayer = () => {
         accessTokenRef.current = data.access_token; // sync ref immediately so fetchLibrary can use it right away
         setAccessToken(data.access_token);
         setTokenExpiresAt(expiresAt);
+        localStorage.setItem(STORAGE.ACCESS_TOKEN, data.access_token);
+        localStorage.setItem(STORAGE.EXPIRES_AT, String(expiresAt));
 
         const nextRefreshToken = data.refresh_token || fallbackRefreshToken || null;
         setRefreshToken(nextRefreshToken);
-        soundcloudTokenStore.save({ accessToken: data.access_token, expiresAt, refreshToken: nextRefreshToken });
+        if (nextRefreshToken) {
+            localStorage.setItem(STORAGE.REFRESH_TOKEN, nextRefreshToken);
+        } else {
+            localStorage.removeItem(STORAGE.REFRESH_TOKEN);
+        }
     }, []);
+
+    const tokenRequest = requestSoundcloudToken;
 
     const refreshAccessToken = useCallback(async () => {
         const currentRefreshToken = refreshTokenRef.current;
         if (!currentRefreshToken) return false;
         try {
-            const data = await requestSoundcloudToken({
+            const data = await tokenRequest({
                 grant_type: "refresh_token",
                 refresh_token: currentRefreshToken,
             });
@@ -160,7 +287,7 @@ export const useSoundcloudPlayer = () => {
             clearAuthState();
             return false;
         }
-    }, [applyTokenResponse, clearAuthState]);
+    }, [applyTokenResponse, clearAuthState, tokenRequest]);
 
     const scApi = useCallback(
         async (path: string, init: RequestInit = {}, opts: { silent?: boolean; includeClientId?: boolean } = {}) => {
@@ -288,57 +415,97 @@ export const useSoundcloudPlayer = () => {
 
     const completeOAuthLogin = useCallback(
         async (code: string, state?: string | null) => {
-            const expectedState = soundcloudOAuthState.read();
-            if (expectedState && state && expectedState !== state) {
-                throw new Error("SoundCloud OAuth state mismatch");
+            const expectedState = localStorage.getItem(STORAGE.OAUTH_STATE);
+            assertOAuthState(expectedState, state);
+            const codeVerifier = localStorage.getItem(STORAGE.PKCE_VERIFIER);
+            if (!codeVerifier) {
+                throw new Error("SoundCloud PKCE verifier missing; restart the login flow");
             }
-            const token = await requestSoundcloudToken({
+            const token = await tokenRequest({
                 grant_type: "authorization_code",
                 code,
+                code_verifier: codeVerifier,
             });
             applyTokenResponse(token);
-            soundcloudOAuthState.clear();
+            localStorage.removeItem(STORAGE.OAUTH_STATE);
+            localStorage.removeItem(STORAGE.PKCE_VERIFIER);
             setStatusText("Cuenta de SoundCloud conectada.");
             await fetchLibrary();
         },
-        [applyTokenResponse, fetchLibrary]
+        [applyTokenResponse, fetchLibrary, tokenRequest]
     );
 
     const startLogin = useCallback(async () => {
-        if (!hasSoundcloudCredentials()) {
+        if (!SOUNDCLOUD_CLIENT_ID) {
             toast({
                 variant: "destructive",
                 title: "Config faltante",
-                description: "Define VITE_SOUNDCLOUD_CLIENT_ID y VITE_SOUNDCLOUD_CLIENT_SECRET.",
+                description: "Define VITE_SOUNDCLOUD_CLIENT_ID en el frontend y configura el secreto en el servidor.",
             });
             return;
         }
 
-        const oauthState = soundcloudOAuthState.create();
+        const oauthState = `${SOUNDCLOUD_STATE_PREFIX}${generateRandomString(24)}`;
+        const codeVerifier = generateRandomString(64);
+        const codeChallenge = await createCodeChallenge(codeVerifier);
+        localStorage.setItem(STORAGE.OAUTH_STATE, oauthState);
+        localStorage.setItem(STORAGE.PKCE_VERIFIER, codeVerifier);
         setIsAuthLoading(true);
-        openOAuthPopup(buildSoundcloudAuthorizeUrl(oauthState), SOUNDCLOUD_OAUTH_POPUP_NAME);
+
+        const authUrl = new URL(SOUNDCLOUD_AUTHORIZE_URL);
+        authUrl.search = new URLSearchParams({
+            client_id: SOUNDCLOUD_CLIENT_ID,
+            response_type: "code",
+            redirect_uri: SOUNDCLOUD_REDIRECT_URI,
+            state: oauthState,
+            scope: "*",
+            code_challenge: codeChallenge,
+            code_challenge_method: "S256",
+        }).toString();
+
+        const width = 520;
+        const height = 760;
+        const left = Math.max(0, window.screenX + Math.round((window.outerWidth - width) / 2));
+        const top = Math.max(0, window.screenY + Math.round((window.outerHeight - height) / 2));
+        const popup = window.open(
+            authUrl.toString(),
+            "soundcloud_oauth_popup",
+            `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+        );
+
+        if (popup && !popup.closed) {
+            popup.focus();
+            return;
+        }
+
+        window.location.href = authUrl.toString();
     }, []);
 
     useEffect(() => {
         let mounted = true;
         const initializeAuth = async () => {
-            const { code, state, error: authError } = readOAuthCallbackParams();
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get("code");
+            const state = params.get("state");
+            const authError = params.get("error");
             const isScFlow = isSoundcloudState(state);
-            const isPopup = isOAuthPopupWindow();
-            const {
-                accessToken: storedToken,
-                refreshToken: storedRefreshToken,
-                expiresAt: storedExpiresAt,
-            } = soundcloudTokenStore.read();
+            const isPopup = Boolean(window.opener && window.opener !== window);
+            const storedToken = localStorage.getItem(STORAGE.ACCESS_TOKEN);
+            const storedRefreshToken = localStorage.getItem(STORAGE.REFRESH_TOKEN);
+            const storedExpiresAt = Number(localStorage.getItem(STORAGE.EXPIRES_AT) || 0);
 
             try {
                 if (isPopup && isScFlow && (code || authError)) {
-                    postOAuthResultToOpener<SoundcloudPopupMessage>({
-                        type: SOUNDCLOUD_OAUTH_MESSAGE_TYPE,
-                        code: code || undefined,
-                        state,
-                        error: authError || undefined,
-                    });
+                    window.opener?.postMessage(
+                        {
+                            type: "soundcloud-oauth-callback",
+                            code: code || undefined,
+                            state,
+                            error: authError || undefined,
+                        } satisfies SoundcloudPopupMessage,
+                        window.location.origin
+                    );
+                    window.close();
                     return;
                 }
 
@@ -355,7 +522,7 @@ export const useSoundcloudPlayer = () => {
                     await fetchLibrary();
                 } else if (storedRefreshToken) {
                     setRefreshToken(storedRefreshToken);
-                    const data = await requestSoundcloudToken({
+                    const data = await tokenRequest({
                         grant_type: "refresh_token",
                         refresh_token: storedRefreshToken,
                     });
@@ -373,10 +540,14 @@ export const useSoundcloudPlayer = () => {
         return () => {
             mounted = false;
         };
-    }, [applyTokenResponse, clearAuthState, completeOAuthLogin, fetchLibrary]);
+    }, [applyTokenResponse, clearAuthState, completeOAuthLogin, fetchLibrary, tokenRequest]);
 
-    const handleOAuthPopupMessage = useCallback(
-        (payload: SoundcloudPopupMessage) => {
+    useEffect(() => {
+        const handlePopupMessage = (event: MessageEvent<SoundcloudPopupMessage>) => {
+            if (event.origin !== window.location.origin) return;
+            const payload = event.data;
+            if (!payload || payload.type !== "soundcloud-oauth-callback") return;
+
             if (payload.error) {
                 setIsAuthLoading(false);
                 toast({
@@ -402,11 +573,11 @@ export const useSoundcloudPlayer = () => {
                 .finally(() => {
                     setIsAuthLoading(false);
                 });
-        },
-        [clearAuthState, completeOAuthLogin]
-    );
+        };
 
-    useOAuthPopupListener(SOUNDCLOUD_OAUTH_MESSAGE_TYPE, handleOAuthPopupMessage);
+        window.addEventListener("message", handlePopupMessage);
+        return () => window.removeEventListener("message", handlePopupMessage);
+    }, [clearAuthState, completeOAuthLogin]);
 
     const syncCurrentTrack = useCallback(() => {
         const widget = widgetRef.current;
@@ -425,18 +596,18 @@ export const useSoundcloudPlayer = () => {
             }
             setCurrentTrack({
                 id: String(sound.id || sound.permalink_url || Date.now()),
-                uri: sound.permalink_url || loadedUrl,
+                uri: sound.permalink_url || loadedUrlRef.current,
                 title: sound.title || "SoundCloud Track",
                 artist: sound.user?.username || "SoundCloud",
                 artistNames: [sound.user?.username || "SoundCloud"],
-                durationMs: sound.duration || durationMs,
-                duration: formatMs(sound.duration || durationMs),
+                durationMs: sound.duration || durationMsRef.current,
+                duration: formatMs(sound.duration || durationMsRef.current),
                 albumArt: upscaleArtwork(sound.artwork_url || sound.user?.avatar_url),
-                externalUrl: sound.permalink_url || loadedUrl,
+                externalUrl: sound.permalink_url || loadedUrlRef.current,
                 artistId: sound.user?.id ? String(sound.user.id) : undefined,
             });
         });
-    }, [durationMs, loadedUrl]);
+    }, []);
 
     const pushRecent = useCallback((item: SoundcloudPlaylist) => {
         if (!item.permalink_url) return;
@@ -448,14 +619,10 @@ export const useSoundcloudPlayer = () => {
 
     useEffect(() => {
         let active = true;
-        loadSoundcloudWidgetApi()
-            .then(() => {
-                if (active) setSdkReady(true);
-            })
-            .catch(console.error);
-        return () => {
-            active = false;
-        };
+        void loadSoundcloudWidgetApi().then(() => {
+            if (active) setSdkReady(true);
+        }).catch(console.error);
+        return () => { active = false; };
     }, []);
 
     useEffect(() => {
@@ -470,8 +637,10 @@ export const useSoundcloudPlayer = () => {
             widget.getDuration((value) => setDurationMs(value || 0));
             widget.getPosition((value) => setPositionMs(value || 0));
             syncCurrentTrack();
+            if (pendingAutoPlayRef.current) widget.play();
         };
         const onPlay = () => {
+            pendingAutoPlayRef.current = false;
             setIsPlaying(true);
             setStatusText("Reproduciendo en SoundCloud.");
             syncCurrentTrack();
@@ -491,8 +660,19 @@ export const useSoundcloudPlayer = () => {
                     try {
                         const res = await scApiRef.current?.(`/tracks/${trackId}/related?limit=10`, {}, { silent: true });
                         if (res?.ok) {
-                            const { items } = parseCollectionResponse<SoundcloudApiItem>(await res.json());
-                            const related = mapPlayableTracks(items);
+                            const data = await res.json();
+                            const collection = Array.isArray(data) ? data : Array.isArray(data?.collection) ? data.collection : [];
+                            const related = collection
+                                .filter(hasPermalink)
+                                .map((t) => ({
+                                    id: Number(t.id),
+                                    title: t.title || "Track",
+                                    permalink_url: t.permalink_url,
+                                    artwork_url: t.artwork_url || t?.user?.avatar_url || null,
+                                    kind: "track" as const,
+                                    artist: t.user?.username || "SoundCloud",
+                                    duration_ms: t.duration || 0,
+                                }));
                             if (related.length > 0) {
                                 const pick = related[Math.floor(Math.random() * related.length)];
                                 const newQueue = [...queue];
@@ -505,9 +685,7 @@ export const useSoundcloudPlayer = () => {
                                 return;
                             }
                         }
-                    } catch {
-                        // Related tracks are best-effort; fall back to a random pick from the queue.
-                    }
+                    } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
                     const nextIdx = Math.floor(Math.random() * queue.length);
                     searchQueueIndexRef.current = nextIdx;
                     setTimeout(() => {
@@ -551,13 +729,11 @@ export const useSoundcloudPlayer = () => {
         widget.bind(Events.PLAY_PROGRESS, onProgress);
 
         return () => {
-            for (const event of [Events.READY, Events.PLAY, Events.PAUSE, Events.FINISH, Events.PLAY_PROGRESS]) {
-                try {
-                    widget.unbind(event);
-                } catch {
-                    // The widget iframe may already be gone; nothing left to unbind.
-                }
-            }
+            try { widget.unbind(Events.READY); } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
+            try { widget.unbind(Events.PLAY); } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
+            try { widget.unbind(Events.PAUSE); } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
+            try { widget.unbind(Events.FINISH); } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
+            try { widget.unbind(Events.PLAY_PROGRESS); } catch { /* Continue if the widget or optional recommendation is unavailable. */ }
             if (widgetRef.current === widget) widgetRef.current = null;
         };
     }, [sdkReady, iframeSrc, syncCurrentTrack]);
@@ -574,11 +750,25 @@ export const useSoundcloudPlayer = () => {
         }
         setInputUrl(normalized);
         setLoadedUrl(normalized);
-        setIsPlaying(autoPlay);
+        pendingAutoPlayRef.current = autoPlay;
+        setIsPlaying(false);
         setPositionMs(0);
         setDurationMs(0);
         setStatusText("Cargando track de SoundCloud...");
-        setIframeSrc(buildWidgetSrc(normalized, autoPlay));
+        const widget = widgetRef.current;
+        if (widget) {
+            widget.load(normalized, {
+                auto_play: autoPlay,
+                hide_related: true,
+                show_comments: false,
+                show_user: true,
+                show_reposts: false,
+                visual: true,
+            });
+            if (autoPlay) widget.play();
+        } else {
+            setIframeSrc(buildWidgetSrc(normalized, autoPlay));
+        }
         if (meta?.title) {
             if (meta.id) {
                 const numId = Number(meta.id);
@@ -591,7 +781,6 @@ export const useSoundcloudPlayer = () => {
                 uri: normalized,
                 title: meta.title,
                 artist: meta.artist || "SoundCloud",
-                artistNames: [meta.artist || "SoundCloud"],
                 durationMs: meta.duration_ms || 0,
                 duration: formatMs(meta.duration_ms || 0),
                 albumArt: upscaleArtwork(meta.artwork_url || null),
@@ -637,7 +826,17 @@ export const useSoundcloudPlayer = () => {
             const res = await scApi(`/playlists/${playlist.id}`, {}, { silent: true });
             if (!res.ok) { setExpandedPlaylist(null); return; }
             const data = await res.json() as { tracks?: SoundcloudApiItem[]; title?: string };
-            const tracks = mapPlayableTracks(data.tracks || []);
+            const tracks: SoundcloudPlaylist[] = (data.tracks || [])
+                .filter(hasPermalink)
+                .map((t) => ({
+                    id: Number(t.id),
+                    title: t.title || "Track",
+                    permalink_url: t.permalink_url,
+                    artwork_url: t.artwork_url || t?.user?.avatar_url || null,
+                    kind: "track" as const,
+                    artist: t.user?.username || "SoundCloud",
+                    duration_ms: t.duration || 0,
+                }));
             setExpandedPlaylist({ id: playlist.id, title: playlist.title, tracks });
         } finally {
             setExpandedPlaylistLoading(false);
@@ -673,42 +872,66 @@ export const useSoundcloudPlayer = () => {
         setSearchResults([]);
     }, []);
 
-    /** Resolves to the mapped results, or `null` when the API call fails. */
-    const fetchTrackSearch = useCallback(
-        async (q: string) => {
-            const response = await scApi(`/tracks?q=${encodeURIComponent(q)}&limit=20&linked_partitioning=1`, {}, { silent: true });
-            return response.ok ? mapSearchResults(await response.json()) : null;
-        },
-        [scApi]
-    );
-
     const searchCatalog = useCallback(
         async (query: string) => {
             const q = query.trim();
             if (!q) {
                 setSearchResults([]);
-                return;
+                return [] as SoundcloudPlaylist[];
             }
             if (!accessTokenRef.current) {
                 toast({ title: "SoundCloud", description: "Conecta tu cuenta para buscar tracks." });
-                return;
+                return [] as SoundcloudPlaylist[];
             }
             setSearchLoading(true);
             try {
-                const mapped = await fetchTrackSearch(q);
-                if (!mapped) {
+                const response = await scApi(`/tracks?q=${encodeURIComponent(q)}&limit=20&linked_partitioning=1`, {}, { silent: true });
+                if (!response.ok) {
                     setSearchResults([]);
-                    return;
+                    return [] as SoundcloudPlaylist[];
                 }
+                const raw = await response.json();
+                const collection = Array.isArray(raw) ? raw : Array.isArray(raw?.collection) ? raw.collection : [];
+                const mapped: SoundcloudPlaylist[] = collection
+                    .filter((item: SoundcloudSearchItem) => item?.permalink_url)
+                    .map((item: SoundcloudSearchItem) => ({
+                        id: Number(item.id),
+                        title: item.title || "Track",
+                        permalink_url: item.permalink_url,
+                        artwork_url: item.artwork_url || item?.user?.avatar_url || null,
+                        track_count: 1,
+                        subtitle: "Busqueda",
+                        kind: "track",
+                        artist: item.user?.username || "SoundCloud",
+                        duration_ms: item.duration || 0,
+                    }));
                 setSearchResults(mapped);
                 searchQueueRef.current = mapped;
                 searchQueueIndexRef.current = -1;
+                return mapped;
             } finally {
                 setSearchLoading(false);
             }
         },
-        [fetchTrackSearch]
+        [scApi]
     );
+
+    const fetchPlaylistTracks = useCallback(async (playlistId: string) => {
+        const res = await scApi(`/playlists/${playlistId}`, {}, { silent: true });
+        if (!res.ok) return [] as SoundcloudPlaylist[];
+        const data = await res.json() as { tracks?: SoundcloudApiItem[] };
+        return (data.tracks || [])
+            .filter(hasPermalink)
+            .map((track) => ({
+                id: Number(track.id),
+                title: track.title || "Track",
+                permalink_url: track.permalink_url,
+                artwork_url: track.artwork_url || track?.user?.avatar_url || null,
+                kind: "track" as const,
+                artist: track.user?.username || "SoundCloud",
+                duration_ms: track.duration || 0,
+            }));
+    }, [scApi]);
 
     const playSearchTrack = useCallback(
         (item: SoundcloudPlaylist) => {
@@ -727,8 +950,23 @@ export const useSoundcloudPlayer = () => {
             if (!accessTokenRef.current) return;
             setSearchLoading(true);
             try {
-                const mapped = await fetchTrackSearch(q);
-                if (!mapped) return;
+                const response = await scApi(`/tracks?q=${encodeURIComponent(q)}&limit=20&linked_partitioning=1`, {}, { silent: true });
+                if (!response.ok) return;
+                const raw = await response.json();
+                const collection = Array.isArray(raw) ? raw : Array.isArray(raw?.collection) ? raw.collection : [];
+                const mapped: SoundcloudPlaylist[] = collection
+                    .filter((item: SoundcloudSearchItem) => item?.permalink_url)
+                    .map((item: SoundcloudSearchItem) => ({
+                        id: Number(item.id),
+                        title: item.title || "Track",
+                        permalink_url: item.permalink_url,
+                        artwork_url: item.artwork_url || item?.user?.avatar_url || null,
+                        track_count: 1,
+                        subtitle: "Busqueda",
+                        kind: "track",
+                        artist: item.user?.username || "SoundCloud",
+                        duration_ms: item.duration || 0,
+                    }));
                 setSearchResults(mapped);
                 const first = mapped[0];
                 if (!first) {
@@ -740,11 +978,21 @@ export const useSoundcloudPlayer = () => {
                 setSearchLoading(false);
             }
         },
-        [fetchTrackSearch, playSearchTrack]
+        [playSearchTrack, scApi]
     );
 
     const togglePlayPause = useCallback(() => {
         widgetRef.current?.toggle();
+    }, []);
+
+    const play = useCallback(() => {
+        pendingAutoPlayRef.current = true;
+        widgetRef.current?.play();
+    }, []);
+
+    const pause = useCallback(() => {
+        pendingAutoPlayRef.current = false;
+        widgetRef.current?.pause();
     }, []);
 
     const nextTrack = useCallback(() => {
@@ -798,7 +1046,7 @@ export const useSoundcloudPlayer = () => {
     );
 
     const setVolumeLevel = useCallback((value: number) => {
-        const next = clamp01(value);
+        const next = Math.max(0, Math.min(1, value));
         setVolume(next);
         widgetRef.current?.setVolume(Math.round(next * 100));
     }, []);
@@ -925,9 +1173,41 @@ export const useSoundcloudPlayer = () => {
                 scApi(`/users/${userId}/tracks?limit=10`, {}, { silent: true, includeClientId: false }),
             ]);
             if (!userRes.ok) return null;
-            const user = (await userRes.json()) as SoundcloudArtistProfile;
-            const rawTracks: unknown = tracksRes.ok ? await tracksRes.json() : [];
-            return mapArtistData(user, rawTracks);
+            interface SCUser {
+                id: number;
+                username: string;
+                full_name?: string;
+                avatar_url?: string | null;
+                followers_count?: number;
+                description?: string;
+                permalink_url?: string;
+            }
+            interface SCTrack {
+                id: number;
+                title?: string;
+                user?: { username?: string };
+                duration?: number;
+                artwork_url?: string | null;
+                permalink_url?: string;
+            }
+            const user = (await userRes.json()) as SCUser;
+            const rawTracks = tracksRes.ok ? ((await tracksRes.json()) as unknown) : [];
+            const tracks = Array.isArray(rawTracks) ? (rawTracks as SCTrack[]) : [];
+            return {
+                id: String(user.id),
+                name: user.full_name || user.username,
+                image: upscaleArtwork(user.avatar_url),
+                followers: user.followers_count,
+                externalUrl: user.permalink_url,
+                topTracks: tracks.slice(0, 10).map((t) => ({
+                    id: String(t.id),
+                    uri: t.permalink_url || "",
+                    title: t.title || "Sin título",
+                    artist: t.user?.username || user.username,
+                    duration: formatMs(t.duration || 0),
+                    albumArt: upscaleArtwork(t.artwork_url || user.avatar_url),
+                })),
+            };
         } catch {
             return null;
         }
@@ -939,7 +1219,10 @@ export const useSoundcloudPlayer = () => {
         setStatusText("Modo SoundCloud cerrado.");
     }, []);
 
-    const progress = useMemo(() => toProgressPercent(positionMs, durationMs), [durationMs, positionMs]);
+    const progress = useMemo(() => {
+        if (!durationMs) return 0;
+        return Math.max(0, Math.min(100, (positionMs / durationMs) * 100));
+    }, [durationMs, positionMs]);
 
     const activeTrack: CurrentTrack =
         currentTrack || {
@@ -947,7 +1230,6 @@ export const useSoundcloudPlayer = () => {
             uri: loadedUrl,
             title: "Sin reproduccion",
             artist: "Carga un track de SoundCloud",
-            artistNames: ["Carga un track de SoundCloud"],
             durationMs: 0,
             duration: "0:00",
             albumArt: fallbackAlbumArt,
@@ -988,6 +1270,7 @@ export const useSoundcloudPlayer = () => {
         loadMoreLibrarySection,
         clearSearchResults,
         searchCatalog,
+        fetchPlaylistTracks,
         searchAndPlay,
         playSearchTrack,
         loadTrack,
@@ -995,6 +1278,8 @@ export const useSoundcloudPlayer = () => {
         playPlaylist,
         playFromList,
         togglePlayPause,
+        play,
+        pause,
         nextTrack,
         prevTrack,
         seekToProgress,

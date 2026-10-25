@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useOAuthPopupListener } from "@/hooks/useOAuthPopupListener";
 import {
+    assertOAuthState,
     generateCodeChallenge,
     generateRandomString,
     isOAuthPopupWindow,
@@ -60,9 +61,7 @@ export const useSpotifyAuth = ({
     const completeOAuthLogin = useCallback(
         async (code: string, state?: string | null) => {
             const expectedState = browserStorage.getItem(SPOTIFY_STORAGE_KEYS.OAUTH_STATE);
-            if (expectedState && state && expectedState !== state) {
-                throw new Error("OAuth state mismatch");
-            }
+            assertOAuthState(expectedState, state);
 
             const codeVerifier = browserStorage.getItem(SPOTIFY_STORAGE_KEYS.CODE_VERIFIER);
             if (!codeVerifier) {
@@ -171,7 +170,7 @@ export const useSpotifyAuth = ({
         return () => {
             mounted = false;
         };
-    }, [clearAuthState, completeOAuthLogin, emitAuthFeedback, tokenRequest, setAccessToken, setRefreshToken, setStatusText, setTokenExpiresAt]);
+    }, [applyTokenResponse, clearAuthState, completeOAuthLogin, emitAuthFeedback, tokenRequest, setAccessToken, setRefreshToken, setStatusText, setTokenExpiresAt]);
 
     const handlePopupMessage = useCallback(
         (payload: OAuthPopupMessage) => {

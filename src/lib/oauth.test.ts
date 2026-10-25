@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateCodeChallenge, generateRandomString } from "./oauth";
+import { assertOAuthState, generateCodeChallenge, generateRandomString } from "./oauth";
+
+describe("OAuth callback state", () => {
+    it.each([[null, "state"], ["state", null], ["state", undefined], ["state", "other"], [null, null]])(
+        "rejects missing or mismatched state (%s, %s)", (expected, received) => {
+            expect(() => assertOAuthState(expected, received)).toThrow("OAuth state mismatch");
+        },
+    );
+    it("accepts only an exact state match", () => {
+        expect(() => assertOAuthState("sp_random", "sp_random")).not.toThrow();
+    });
+});
 
 describe("generateCodeChallenge", () => {
     it("matches the RFC 7636 S256 test vector", async () => {

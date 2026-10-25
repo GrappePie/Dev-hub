@@ -30,6 +30,7 @@ interface AlbumArtDisplayProps {
     onToggleVideoMode?: () => void;
     onTogglePipMode?: () => void;
     bpm?: number | null;
+    bpmConfidence?: number;
     beatSignal?: MutableRefObject<number>;
 }
 
@@ -51,6 +52,7 @@ const AlbumArtDisplay = ({
                              onToggleVideoMode,
                              onTogglePipMode,
                              bpm,
+                             bpmConfidence,
                              beatSignal,
                          }: AlbumArtDisplayProps) => {
     const sfx = useRetroSfx();
@@ -83,7 +85,7 @@ const AlbumArtDisplay = ({
         ? createPortal(
             <div style={{
                 position: "fixed",
-                bottom: "calc(1.5rem + 162px + 4px)",
+                bottom: "calc(1.5rem + 208px + 4px)",
                 right: "1.5rem",
                 zIndex: 10000,
                 display: "flex",
@@ -116,10 +118,10 @@ const AlbumArtDisplay = ({
                 />
 
                 {/*
-                    Video container — ALWAYS in the DOM when playerHostRef is provided.
+                    Video container — always mounted and at least 200 x 200.
                     Never conditionally unmounted to prevent player destruction on mode change.
                     CSS position/visibility changes based on mode:
-                    - image mode: hidden off-screen
+                    - image mode: a visible 200 x 200 panel below the cover
                     - inline mode: absolute covering the image
                     - PiP mode: fixed at viewport bottom-right
                 */}
@@ -128,42 +130,14 @@ const AlbumArtDisplay = ({
                         ref={!pipMode ? videoContainerRef : undefined}
                         style={
                             !showVideo
-                                ? { position: "fixed", left: -9999, top: 0, width: 1, height: 1, overflow: "hidden", pointerEvents: "none" }
+                                ? { position: "relative", width: 208, height: 208, margin: "12px auto 0", background: "black", border: "4px solid hsl(var(--border))", boxShadow: "4px 4px 0 hsl(240 30% 4%)", overflow: "hidden" }
                                 : pipMode
-                                ? { position: "fixed", bottom: "1.5rem", right: "1.5rem", width: 288, height: 162, zIndex: 9999, background: "black", border: "4px solid hsl(var(--border))", boxShadow: "4px 4px 0 hsl(240 30% 4%)", overflow: "hidden" }
+                                ? { position: "fixed", bottom: "1.5rem", right: "1.5rem", width: 356, height: 208, zIndex: 9999, background: "black", border: "4px solid hsl(var(--border))", boxShadow: "4px 4px 0 hsl(240 30% 4%)", overflow: "hidden" }
                                 : { position: "absolute", inset: 0, border: "4px solid hsl(var(--border))", boxShadow: "4px 4px 0 hsl(240 30% 4%)", overflow: "hidden" }
                         }
                     >
                         <div ref={playerHostRef} className="yt-video-container w-full h-full" />
 
-                        {/* Hover controls — only in inline mode */}
-                        {showVideo && !pipMode && (
-                            <div className="absolute inset-0 flex flex-col justify-end opacity-0 hover:opacity-100 transition-opacity duration-200">
-                                <div className="flex items-center justify-center gap-2 pb-2">
-                                    <button
-                                        className="retro-btn-secondary !p-1.5"
-                                        title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-                                        onClick={() => void handleFullscreen()}
-                                    >
-                                        <PixelIcon icon={Expand} size="sm" />
-                                    </button>
-                                    <button
-                                        className="retro-btn-secondary !p-1.5"
-                                        title="Mini reproductor"
-                                        onClick={onTogglePipMode}
-                                    >
-                                        <PixelIcon icon={PictureInPicture} size="sm" />
-                                    </button>
-                                    <button
-                                        className="retro-btn-secondary !p-1.5"
-                                        title="Regresar a imagen"
-                                        onClick={onToggleVideoMode}
-                                    >
-                                        <PixelIcon icon={Image} size="sm" />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -172,18 +146,37 @@ const AlbumArtDisplay = ({
                     <div className="absolute top-2 right-2 w-3 h-3 bg-accent border border-foreground animate-pulse-glow" />
                 )}
 
-                {/* VIDEO button — only in image mode (video mode has its own hover controls) */}
-                {playerHostRef && !showVideo && onToggleVideoMode && (
-                    <button
-                        onClick={() => { sfx("select"); onToggleVideoMode(); }}
-                        title="Ver video"
-                        className="absolute bottom-2 left-2 retro-btn-secondary !p-1.5 flex items-center gap-1"
-                    >
-                        <PixelIcon icon={Video} size="sm" />
-                        <span className="hidden sm:inline font-display text-[7px]">VIDEO</span>
-                    </button>
-                )}
             </div>
+
+            {playerHostRef && !showVideo && onToggleVideoMode && (
+                <button
+                    onClick={() => { sfx("select"); onToggleVideoMode(); }}
+                    title="Alternar video y portada"
+                    className="retro-btn-secondary !p-1.5 flex items-center gap-1"
+                >
+                    <PixelIcon icon={Video} size="sm" />
+                    <span className="font-display text-[7px]">MOSTRAR VIDEO</span>
+                </button>
+            )}
+
+            {/* Keep custom controls outside the YouTube viewport so they never obscure it. */}
+            {playerHostRef && showVideo && !pipMode && (
+                <div className="flex items-center justify-center gap-2">
+                    <button
+                        className="retro-btn-secondary !p-1.5"
+                        title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                        onClick={() => void handleFullscreen()}
+                    >
+                        <PixelIcon icon={Expand} size="sm" />
+                    </button>
+                    <button className="retro-btn-secondary !p-1.5" title="Mini reproductor" onClick={onTogglePipMode}>
+                        <PixelIcon icon={PictureInPicture} size="sm" />
+                    </button>
+                    <button className="retro-btn-secondary !p-1.5" title="Mostrar portada" onClick={onToggleVideoMode}>
+                        <PixelIcon icon={Image} size="sm" />
+                    </button>
+                </div>
+            )}
 
             {/* PiP placeholder — shown in the image slot when video is floating */}
             {playerHostRef && showVideo && pipMode && (
@@ -239,7 +232,7 @@ const AlbumArtDisplay = ({
                 </div>
             </div>
 
-            <Visualizer isPlaying={isPlaying} analyser={analyser} onRequestCapture={onRequestCapture} bpm={bpm} beatSignal={beatSignal} />
+            <Visualizer isPlaying={isPlaying} analyser={analyser} onRequestCapture={onRequestCapture} bpm={bpm} bpmConfidence={bpmConfidence} beatSignal={beatSignal} />
         </div>
     );
 };
