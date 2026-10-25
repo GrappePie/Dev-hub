@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { YouTubeTrack } from "@/lib/youtube/types";
+import type { ConnectSessionState } from "@/lib/youtubeConnect";
 import { useYoutubePlayer } from "./useYoutubePlayer";
 
 vi.mock("@/lib/sdk", () => ({
@@ -9,6 +10,16 @@ vi.mock("@/lib/sdk", () => ({
 }));
 
 const players: FakePlayer[] = [];
+const connectHarness = vi.hoisted(() => ({
+    takeover: null as ((state: ConnectSessionState, position: number) => void) | null,
+}));
+// Isolate SDK lifecycle tests from Connect polling while exposing its handoff callback.
+vi.mock("@/hooks/useYoutubeConnect", () => ({
+    default: (options: { onTakeover: NonNullable<typeof connectHarness.takeover> }) => {
+        connectHarness.takeover = options.onTakeover;
+        return { isConnected: false, isActiveDevice: true };
+    },
+}));
 
 class FakePlayer implements YouTubePlayer {
     unMute = vi.fn();
@@ -24,6 +35,7 @@ class FakePlayer implements YouTubePlayer {
     setSize = vi.fn();
     seekTo = vi.fn();
     destroy = vi.fn();
+    getIframe?: () => HTMLIFrameElement | null;
 
     constructor(
         _element: HTMLElement | string,
@@ -34,6 +46,12 @@ class FakePlayer implements YouTubePlayer {
 
     becomeReady() {
         act(() => this.options.events?.onReady?.({ target: this }));
+    }
+
+    emitStaleEvents() {
+        this.options.events?.onReady?.({ target: this });
+        this.options.events?.onStateChange?.({ data: 1, target: this });
+        this.options.events?.onError?.({ data: 100, target: this });
     }
 }
 
@@ -65,6 +83,7 @@ describe("useYoutubePlayer", () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         delete window.YT;
         players.length = 0;
         vi.unstubAllGlobals();
@@ -90,5 +109,43 @@ describe("useYoutubePlayer", () => {
         await act(async () => { players[0].becomeReady(); });
         expect(players).toHaveLength(1);
         expect(players[0].loadVideoById).toHaveBeenCalledWith("abc123");
+    });
+
+    it("ignores callbacks from a player after its host has been removed", async () => {
+        const { result } = await mountPlayer();
+        const oldPlayer = players[0];
+        act(() => result.current.playerHostRef(null));
+        const status = result.current.statusText;
+        act(() => oldPlayer.emitStaleEvents());
+        expect(result.current.isReady).toBe(false);
+        expect(result.current.isPlaying).toBe(false);
+        expect(result.current.statusText).toBe(status);
+        expect(oldPlayer.destroy).toHaveBeenCalledOnce();
+    });
+
+    it.each([false, true])("cancels a Connect resume on teardown (already ready: %s)", async (ready) => {
+        const { result, unmount } = await mountPlayer();
+        const player = players[0];
+        if (ready) player.becomeReady();
+        vi.useFakeTimers();
+        const state: ConnectSessionState = {
+            track, queue: [track], queueIndex: 0, positionMs: 10000, durationMs: 120000,
+            isPlaying: true, shuffleMode: "off", repeatMode: 0, volume: 0.5,
+            activeDeviceId: "other-device", activeDeviceName: "Other", version: 1, updatedAt: Date.now(),
+        };
+        await act(async () => { connectHarness.takeover?.(state, 10000); });
+        if (!ready) player.becomeReady();
+        act(() => result.current.playerHostRef(null));
+        await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+        expect(player.seekTo).not.toHaveBeenCalled();
+        unmount();
+    });
+
+    it("handles a detached iframe without calling its broken destroy method", async () => {
+        const { result } = await mountPlayer();
+        const player = players[0];
+        player.getIframe = () => null;
+        expect(() => act(() => result.current.playerHostRef(null))).not.toThrow();
+        expect(player.destroy).not.toHaveBeenCalled();
     });
 });

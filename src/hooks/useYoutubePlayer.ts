@@ -231,6 +231,7 @@ export const useYoutubePlayer = () => {
     const fetchedLibraryRef = useRef(false);
     const handleTrackEndRef = useRef<() => void>(() => undefined);
     const pendingConnectResumeRef = useRef<{ positionMs: number; isPlaying: boolean } | null>(null);
+    const connectResumeTimerRef = useRef<number | null>(null);
 
     const [apiReady, setApiReady] = useState(false);
     const [playerReady, setPlayerReady] = useState(false);
@@ -872,6 +873,7 @@ export const useYoutubePlayer = () => {
     useEffect(() => {
         if (!apiReady || !window.YT?.Player || !playerHostEl || playerRef.current) return;
         const { PlayerState } = window.YT;
+        let disposed = false;
         const player = new window.YT.Player(playerHostEl, {
             width: "200",
             height: "200",
@@ -885,6 +887,7 @@ export const useYoutubePlayer = () => {
             },
             events: {
                 onReady: () => {
+                    if (disposed) return;
                     setPlayerReady(true);
                     player.setVolume(Math.round(volumeRef.current * 100));
                     setStatusText("YouTube player listo.");
@@ -895,7 +898,8 @@ export const useYoutubePlayer = () => {
                         const resume = pendingConnectResumeRef.current;
                         pendingConnectResumeRef.current = null;
                         if (resume) {
-                            window.setTimeout(() => {
+                            connectResumeTimerRef.current = window.setTimeout(() => {
+                                if (disposed || playerRef.current !== player) return;
                                 player.seekTo(resume.positionMs / 1000, true);
                                 if (resume.isPlaying) player.playVideo();
                                 else player.pauseVideo();
@@ -906,6 +910,7 @@ export const useYoutubePlayer = () => {
                     }
                 },
                 onStateChange: (event) => {
+                    if (disposed) return;
                     if (event.data === PlayerState.PLAYING) {
                         setIsPlaying(true);
                         setStatusText("Reproduciendo en YouTube.");
@@ -920,6 +925,7 @@ export const useYoutubePlayer = () => {
                     }
                 },
                 onError: () => {
+                    if (disposed) return;
                     setIsPlaying(false);
                     setStatusText("No se pudo reproducir ese video.");
                 },
@@ -927,8 +933,20 @@ export const useYoutubePlayer = () => {
         });
         playerRef.current = player;
         return () => {
-            player.destroy();
+            disposed = true;
+            if (connectResumeTimerRef.current !== null) {
+                window.clearTimeout(connectResumeTimerRef.current);
+                connectResumeTimerRef.current = null;
+            }
             if (playerRef.current === player) playerRef.current = null;
+            setPlayerReady(false);
+
+            try {
+                const iframe = player.getIframe?.();
+                if (!player.getIframe || iframe?.contentWindow) player.destroy();
+            } catch (error) {
+                console.warn("[youtube] El reproductor ya estaba desmontado.", error);
+            }
         };
     }, [apiReady, playerHostEl]);
 
@@ -1374,7 +1392,9 @@ export const useYoutubePlayer = () => {
         }
 
         player.loadVideoById(track.videoId);
-        window.setTimeout(() => {
+        if (connectResumeTimerRef.current !== null) window.clearTimeout(connectResumeTimerRef.current);
+        connectResumeTimerRef.current = window.setTimeout(() => {
+            if (playerRef.current !== player) return;
             player.seekTo(resumePositionMs / 1000, true);
             if (state.isPlaying) player.playVideo();
             else player.pauseVideo();

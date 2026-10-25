@@ -185,6 +185,7 @@ declare global {
         setVolume: (volume: number) => void;
         setSize: (width: number, height: number) => void;
         seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
+        getIframe?: () => HTMLIFrameElement | null;
         destroy: () => void;
     }
 

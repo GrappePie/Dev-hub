@@ -4,8 +4,8 @@ import {
     Search, SkipBack, SkipForward, Trash2, Users, Wifi, WifiOff,
     Volume2, VolumeX, Library, ChevronLeft, Radio,
 } from "lucide-react";
-import mixyVideo from "@/assets/idol-mixy-body.mp4";
-import mixyPoster from "@/assets/idol-mixy.png";
+import mixyVideo from "@/assets/mixy-dj-perfect-loop-v3.mp4";
+import mixyPoster from "@/assets/mixy-dj-master.png";
 import type { MixyRoomController } from "@/hooks/useMixyRoom";
 import {
     extrapolateMixyPosition,
