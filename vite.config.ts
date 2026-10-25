@@ -45,6 +45,8 @@ export default defineConfig(({ mode }) => {
       if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
       if (/[\\/]node_modules[\\/]@tanstack[\\/]/.test(id)) return "tanstack";
       if (/[\\/]node_modules[\\/]gsap[\\/]/.test(id)) return "gsap";
+      if (/[\\/]node_modules[\\/](@radix-ui|@floating-ui)[\\/]/.test(id)) return "ui";
+      if (/[\\/]node_modules[\\/](tailwind-merge|clsx|class-variance-authority)[\\/]/.test(id)) return "styles";
     } } },
   },
   server: {
